@@ -62,8 +62,9 @@ def load_dataset(dataset_name):
         # Match each JPG with its metadata row
         for image_path in jpg_files:
             record = {
-                "node_id": node_id,        # Store the Node ID
-                "image_path": image_path,  # Store the path of the JPG image
+                "node_id": node_id,             # Store the Node ID
+                "image_name": image_path.name,  # Store the JPG image name
+                "image_path": image_path,       # Store the path of the JPG image
 
                 # Convert the current metadata row to a dictionary and store it
                 "metadata": row.to_dict()
@@ -72,6 +73,15 @@ def load_dataset(dataset_name):
             records.append(record)
 
     return records
+
+# Provide one image record at a time to Core
+def iter_images(dataset_name):
+    records = load_dataset(dataset_name)
+
+    for record in records:
+        yield record
+
+
 
 # test input function
 if __name__ == "__main__":
@@ -82,12 +92,16 @@ if __name__ == "__main__":
     ]
 
     for dataset in datasets:
+        # Load all input records from this dataset
         records = load_dataset(dataset)
+
         print(f"\nDataset: {dataset}")
         print(f"Matched drawings: {len(records)}")
 
+        # Test the first record
         if records:
             first_record = records[0]
+
             print(
                 "Node ID:",
                 first_record["node_id"]
@@ -103,6 +117,48 @@ if __name__ == "__main__":
                 first_record["metadata"].get("Node Title")
             )
 
+        # Store images for each Node ID
+        node_images = {}
+
+        for record in records:
+            node_id = record["node_id"]
+
+            if node_id not in node_images:
+                node_images[node_id] = []
+
+            node_images[node_id].append(
+                record["image_path"]
+            )
+
+        # Find Node IDs that have multiple images
+        print("\nNode IDs with multiple images:")
+
+        for node_id, images in node_images.items():
+            if len(images) > 1:
+                print(f"\nNode ID: {node_id}")
+                print(
+                    f"Number of images: {len(images)}"
+                )
+
+                for image in images:
+                    print(" -", image)
+
+    # Test iter_images function
+    print("\n--- Testing iter_images ---")
+
+    count = 0
+
+    for record in iter_images("Bates_smart_Mccutcheon"):
+        print("\nImage received by Core:")
+        print("Node ID:", record["node_id"])
+        print("Image name:", record["image_name"])
+        print("Image path:", record["image_path"])
+
+        count += 1
+
+        # Only test the first 3 images
+        if count == 3:
+            break
 
 
 # Define output function
