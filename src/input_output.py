@@ -179,13 +179,20 @@ def save_output(results, output_path):
         "draughtsperson",
         "drawing_number",
         "date",
-        "scale"
+        "scale",
+        "drawing_types"
     ]
 
     # Add missing columns as empty values
     for column in output_columns:
         if column not in output_df.columns:
             output_df[column] = ""
+    
+    # Convert multiple drawing types into one string for CSV
+    if "drawing_types" in output_df.columns:
+        output_df["drawing_types"] = output_df["drawing_types"].apply(
+            lambda x: "; ".join(x) if isinstance(x, list) else x
+        )
 
     # Keep the columns in the required order
     output_df = output_df[output_columns]
@@ -211,7 +218,12 @@ test_results = [
         "draughtsperson": "Test Person",
         "drawing_number": "001",
         "date": "1984",
-        "scale": "1:100"
+        "scale": "1:100",
+        "drawing_types": [
+            "Front View",
+            "Left View",
+            "Right View"
+        ]
     }
 ]
 
