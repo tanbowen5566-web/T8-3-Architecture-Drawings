@@ -81,3 +81,10 @@ python src/main.py
 ├── setup.py          # Cross-platform environment setup script
 └── README.md
 ```
+A Python-based project for processing and organising UMA architectural drawing records.
+
+## Dataset
+
+The architectural drawing dataset was provided by the teaching team for this project.
+
+The dataset is stored locally in the `data/` folder and is not included in this repository.
