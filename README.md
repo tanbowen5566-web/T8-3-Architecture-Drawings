@@ -62,6 +62,11 @@ python src/main.py
 
 (Adjust the entry point above once the pipeline scripts are finalised.)
 
+## Input Usage
+The input module can be accessed through `iter_images(dataset_name)`.
+It provides one image record at a time, so the Core does not need to read `metadata.csv` or search the Node ID folders directly.
+
+
 ## Notes
 
 - First run will download model weights (docTR, LayoutLMv3) — this requires an internet connection **once**. After that, the models are cached locally and can run fully offline.
