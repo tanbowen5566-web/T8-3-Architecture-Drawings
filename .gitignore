@@ -222,3 +222,6 @@ __marimo__/
 data/
 output/
 .DS_Store
+output/
+*.pth
+data/project-1-at-*
