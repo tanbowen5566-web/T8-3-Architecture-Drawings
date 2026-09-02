@@ -13,8 +13,8 @@ import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from PIL import Image, ImageDraw
 
-MODEL_PATH = "output/title_block_detector_v0.pth"
-OUTPUT_DIR = "output/generalization_test"
+MODEL_PATH = "output/title_block_detector_v1.pth"
+OUTPUT_DIR = "output/generalization_test_v1"
 NUM_CLASSES = 2
 SCORE_THRESHOLD = 0.3
 
