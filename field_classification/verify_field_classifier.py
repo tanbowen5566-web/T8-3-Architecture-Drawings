@@ -1,11 +1,14 @@
 """
 verify_field_classifier.py
 
-用途：加载训练好的LayoutLMv3字段分类模型，对裁剪图跑预测，
-      输出每个词被预测成哪个字段，并和真实标注对比，
-      检查pipeline是否work（不是评估泛化能力——训练/测试用的是同一批图）
+Purpose: Load the trained LayoutLMv3 field classification model, run
+         predictions on the crop images, output which field each word was
+         predicted as, and compare against the ground-truth annotations to
+         check whether the pipeline works (this does NOT evaluate
+         generalization -- training and testing use the same batch of
+         images)
 
-用法：
+Usage:
     python verify_field_classifier.py
 """
 
@@ -21,7 +24,7 @@ DATA_PATH = "data/layoutlm_training_data.json"
 IMAGE_DIR = "data/titleblock_crops_auto"
 OUTPUT_DIR = "output/field_predictions_visualized"
 
-# 每个字段一个颜色，方便可视化
+# One color per field, for visualization
 LABEL_COLORS = {
     "architect": "#FF6B6B",
     "project_name": "#4ECDC4",
@@ -55,7 +58,7 @@ def bbox_1000_to_pixels(bbox_1000, image_width, image_height):
 def main():
     device = torch.device("cpu")
 
-    print("加载模型...")
+    print("Loading model...")
     processor = LayoutLMv3Processor.from_pretrained(MODEL_DIR, apply_ocr=False)
     model = LayoutLMv3ForTokenClassification.from_pretrained(MODEL_DIR)
     model.to(device)
@@ -96,7 +99,8 @@ def main():
         predictions = outputs.logits.argmax(-1).squeeze().tolist()
         word_ids = encoding.word_ids(batch_index=0)
 
-        # 每个词可能被切成多个subword token，取该词第一个token的预测结果
+        # Each word may be split into multiple subword tokens; take the
+        # prediction of the word's first token
         pred_labels_per_word = {}
         for token_idx, word_idx in enumerate(word_ids):
             if word_idx is None or word_idx in pred_labels_per_word:
@@ -117,7 +121,7 @@ def main():
                 correct_words += 1
 
             if true_label != "O" or pred_label != "O":
-                print(f"  {match} {word:20s} 真实={true_label:16s} 预测={pred_label}")
+                print(f"  {match} {word:20s} true={true_label:16s} predicted={pred_label}")
 
             if pred_label in LABEL_COLORS:
                 px_box = bbox_1000_to_pixels(boxes[i], image.width, image.height)
@@ -131,11 +135,11 @@ def main():
             )
         out_path = os.path.join(OUTPUT_DIR, source_image)
         draw_image.save(out_path)
-        print(f"  已保存可视化: {out_path}")
+        print(f"  Saved visualization: {out_path}")
 
     accuracy = correct_words / total_words if total_words else 0
-    print(f"\n整体词级准确率: {correct_words}/{total_words} = {accuracy:.2%}")
-    print("(注意：这是在训练用的同一批图上测的，只能验证pipeline正确性，不代表泛化能力)")
+    print(f"\nOverall word-level accuracy: {correct_words}/{total_words} = {accuracy:.2%}")
+    print("(Note: this is measured on the same batch of images used for training, it only verifies pipeline correctness, not generalization ability)")
 
 
 if __name__ == "__main__":

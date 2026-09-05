@@ -1,14 +1,18 @@
 """
 test_end_to_end_new_image.py
 
-用途：对一张完全没在训练数据里出现过的图，跑通完整流程：
-      1. 用title block检测模型定位并裁剪
-      2. 用docTR做OCR提取词+坐标
-      3. 用LayoutLMv3字段分类模型预测每个词的字段
+Purpose: Run the full pipeline on a single image that never appeared in the
+         training data at all:
+         1. Locate and crop with the title block detection model
+         2. Extract words + coordinates with docTR OCR
+         3. Predict each word's field with the LayoutLMv3 field
+            classification model
 
-这是比之前"同批图片自测"更有说服力的验证——图片是模型完全没见过的。
+This is a more convincing check than the earlier "self-test on the same
+batch of images" -- the image here is one the model has genuinely never
+seen.
 
-用法：
+Usage:
     python test_end_to_end_new_image.py
 """
 
@@ -22,7 +26,8 @@ from doctr.io import DocumentFile
 from doctr.models import ocr_predictor
 from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 
-# 之前泛化测试中，检测模型成功识别的那张图（同项目其他页，置信度0.966）
+# The image the detection model successfully identified in the earlier
+# generalization test (same project, different page, confidence 0.966)
 TEST_IMAGE_PATH = "data/YFA_cabana/456002/1238229_1984-0047-02645-00001.jpg"
 
 DETECTOR_MODEL_PATH = "output/title_block_detector_v0.pth"
@@ -79,10 +84,12 @@ def detect_and_crop(image_path, detector):
 def run_ocr(cropped_image, ocr_model):
     doc = DocumentFile.from_images(
         [
-            # docTR从内存图片读取需要先转成bytes；简单起见先落盘再读
+            # docTR needs bytes when reading from an in-memory image; for
+            # simplicity, write to disk first and read it back
         ]
     )
-    # 简化处理：先存临时文件再走标准OCR接口，兼容前面写的OCR脚本逻辑
+    # Simplified approach: save to a temp file first, then go through the
+    # standard OCR interface, matching the OCR script logic written earlier
     tmp_path = os.path.join(OUTPUT_DIR, "_tmp_crop.jpg")
     cropped_image.save(tmp_path)
 
@@ -120,31 +127,31 @@ def bbox_1000_to_pixels(bbox_1000, image_width, image_height):
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    print(f"测试图片: {TEST_IMAGE_PATH}\n")
+    print(f"Test image: {TEST_IMAGE_PATH}\n")
 
-    print("[1/3] 加载检测模型，定位并裁剪title block...")
+    print("[1/3] Loading detection model, locating and cropping title block...")
     detector = build_detector()
     cropped, det_score = detect_and_crop(TEST_IMAGE_PATH, detector)
 
     if cropped is None:
-        print("检测失败：没有找到置信度足够高的title block")
+        print("Detection failed: no title block found with sufficient confidence")
         return
 
-    print(f"  检测成功，置信度={det_score:.3f}")
+    print(f"  Detection succeeded, confidence={det_score:.3f}")
     crop_save_path = os.path.join(OUTPUT_DIR, "cropped.jpg")
     cropped.save(crop_save_path)
-    print(f"  裁剪图已保存: {crop_save_path}")
+    print(f"  Cropped image saved: {crop_save_path}")
 
-    print("\n[2/3] 加载docTR，做OCR...")
+    print("\n[2/3] Loading docTR, running OCR...")
     ocr_model = ocr_predictor(pretrained=True)
     words_data = run_ocr(cropped, ocr_model)
-    print(f"  提取到 {len(words_data)} 个词")
+    print(f"  Extracted {len(words_data)} words")
 
     if not words_data:
-        print("OCR没有提取到任何文字，流程中止")
+        print("OCR extracted no text, aborting pipeline")
         return
 
-    print("\n[3/3] 加载字段分类模型，预测每个词的字段...")
+    print("\n[3/3] Loading field classification model, predicting each word's field...")
     processor = LayoutLMv3Processor.from_pretrained(FIELD_MODEL_DIR, apply_ocr=False)
     field_model = LayoutLMv3ForTokenClassification.from_pretrained(FIELD_MODEL_DIR)
     field_model.eval()
@@ -171,7 +178,7 @@ def main():
             continue
         pred_labels_per_word[word_idx] = id2label[predictions[token_idx]]
 
-    print("\n===== 预测结果 =====")
+    print("\n===== Prediction results =====")
     draw_image = cropped.copy()
     draw = ImageDraw.Draw(draw_image)
 
@@ -185,9 +192,9 @@ def main():
 
     out_path = os.path.join(OUTPUT_DIR, "prediction_visualized.jpg")
     draw_image.save(out_path)
-    print(f"\n可视化结果已保存: {out_path}")
-    print("\n注意：这张图完全没在训练数据里出现过，此结果代表真实泛化能力，")
-    print("而不是之前100%准确率那种\"记住答案\"的自测。")
+    print(f"\nVisualization saved: {out_path}")
+    print("\nNote: this image never appeared in the training data at all, so this result")
+    print("reflects genuine generalization ability, not the earlier 100%-accuracy \"memorized the answers\" self-test.")
 
 
 if __name__ == "__main__":

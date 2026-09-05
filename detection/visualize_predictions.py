@@ -1,12 +1,10 @@
 """
-visualize_val_predictions.py
+Title Block Detection - Inference Visualization Script
+Purpose: Load the trained model, run predictions on images, draw the
+         predicted boxes, and save the results
 
-用途：加载v1检测模型（16张图训练，14训练+2验证划分），
-      对验证集那2张图（模型训练时没有直接见过标注答案）跑预测并画框，
-      用于肉眼检查模型是否真的学到了定位title block的能力。
-
-用法：
-    python visualize_val_predictions.py
+Usage:
+    python visualize_predictions.py
 """
 
 import os
@@ -14,26 +12,24 @@ import os
 import torch
 import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
-MODEL_PATH = "output/title_block_detector_v2.pth"
-OUTPUT_DIR = "output/val_predictions_visualized_v2"
-NUM_CLASSES = 2
-SCORE_THRESHOLD = 0.3
-
-# 种子42、分层划分下，验证集是这10张图（7张YFA_state_government + 3张YFA_cabana）
-VAL_IMAGES = [
-    "data/YFA_state_government/453312/1232680_2018-0077-00837-00001.jpg",
-    "data/YFA_state_government/460638/1264414_1984-0047-02854-00001.jpg",
-    "data/YFA_state_government/460639/1264415_1984-0047-02855-00001.jpg",
-    "data/YFA_state_government/453307/1232667_2018-0077-00832-00001.jpg",
-    "data/YFA_state_government/453302/1232654_2018-0077-00827-00001.jpg",
-    "data/YFA_state_government/453299/1232645_2018-0077-00824-00001.jpg",
-    "data/YFA_state_government/453296/1232636_2018-0077-00821-00001.jpg",
-    "data/YFA_cabana/455997/1238211_1984-0047-02640-00001.jpg",
-    "data/YFA_cabana/455992/1238196_1984-0047-02635-00001.jpg",
-    "data/YFA_cabana/456005/1238244_1984-0047-02648-00001.jpg",
+# Same image paths as the training script
+IMAGE_PATHS = [
+    "data/YFA_cabana_test/455995/1238207_1984-0047-02638-00001.jpg",
+    "data/YFA_cabana_test/455992/1238196_1984-0047-02635-00001.jpg",
+    "data/YFA_cabana_test/455993/1238198_1984-0047-02636-00001.jpg",
+    "data/YFA_cabana_test/455994/1238204_1984-0047-02637-00001.jpg",
+    "data/YFA_cabana_test/455996/1238209_1984-0047-02639-00001.jpg",
 ]
+
+MODEL_PATH = "output/title_block_detector_v0.pth"
+OUTPUT_DIR = "output/predictions_visualized"
+NUM_CLASSES = 2  # background + title_block
+
+# Only draw boxes above this confidence threshold (set low for now, to see
+# what the model is actually predicting)
+SCORE_THRESHOLD = 0.3
 
 
 def build_model(num_classes):
@@ -44,7 +40,7 @@ def build_model(num_classes):
 
 
 def main():
-    device = torch.device("cpu")
+    device = torch.device("cpu")  # Inference load is small, use CPU directly for consistency and stability with training
 
     model = build_model(NUM_CLASSES)
     model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
@@ -53,7 +49,7 @@ def main():
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    for img_path in VAL_IMAGES:
+    for img_path in IMAGE_PATHS:
         image = Image.open(img_path).convert("RGB")
         img_tensor = torchvision.transforms.functional.to_tensor(image).to(device)
 
@@ -63,6 +59,7 @@ def main():
         boxes = prediction["boxes"]
         scores = prediction["scores"]
 
+        # Draw boxes
         draw_image = image.copy()
         draw = ImageDraw.Draw(draw_image)
 
@@ -72,14 +69,17 @@ def main():
                 continue
             kept += 1
             x1, y1, x2, y2 = box.tolist()
+            # Scale up line width since the source images are large (10000+ px), thin lines would be hard to see
             line_width = max(5, int(image.width / 1000))
             draw.rectangle([x1, y1, x2, y2], outline="red", width=line_width)
-            draw.text((x1, max(0, y1 - 60)), f"title_block {score:.2f}", fill="red")
+            label_text = f"title_block {score:.2f}"
+            draw.text((x1, max(0, y1 - 60)), label_text, fill="red")
 
-        print(f"{os.path.basename(img_path)}: 检测到 {kept} 个框（阈值{SCORE_THRESHOLD}以上）")
+        print(f"{os.path.basename(img_path)}: detected {kept} box(es) (above threshold {SCORE_THRESHOLD})")
         for box, score in zip(boxes, scores):
-            print(f"   候选框 score={score:.3f} box={[round(v) for v in box.tolist()]}")
+            print(f"   candidate box score={score:.3f} box={[round(v) for v in box.tolist()]}")
 
+        # Save (downscaled a bit for easier viewing, since the original images are very large)
         max_display_width = 2000
         if draw_image.width > max_display_width:
             ratio = max_display_width / draw_image.width
@@ -88,7 +88,7 @@ def main():
 
         out_path = os.path.join(OUTPUT_DIR, os.path.basename(img_path))
         draw_image.save(out_path)
-        print(f"   已保存: {out_path}\n")
+        print(f"   Saved: {out_path}\n")
 
 
 if __name__ == "__main__":

@@ -1,19 +1,27 @@
 """
 export_fields_to_csv.py
 
-用途：对一批title block裁剪图跑"OCR + 字段分类"完整流程，
-      把每张图的字段结果对接到队友的 src/input_output.py::save_output()，
-      按团队约定的8列schema输出主CSV；
-      另外把每个字段的预测置信度单独存一份文件（save_output不支持置信度列，
-      不改队友的共用代码，避免影响其他模块）。
+Purpose: Run the full "OCR + field classification" pipeline on a batch
+         of title block crop images, feed each image's field results
+         into the teammate's src/input_output.py::save_output(),
+         producing the main CSV in the team's agreed 8-column schema;
+         also writes each field's prediction confidence to a separate
+         file (save_output doesn't support a confidence column, and we
+         don't want to modify the teammate's shared code / affect other
+         modules).
 
-用法：
+Usage:
+    # Use the default path (data/titleblock_crops_auto)
     python export_fields_to_csv.py
 
-依赖：
+    # Point at any crop folder and output filenames
+    python export_fields_to_csv.py --image_dir data/titleblock_crops_folderA --output_csv output/extracted_metadata_folderA.csv
+
+Dependencies:
     pip install python-doctr[torch] transformers torch pillow pandas
 """
 
+import argparse
 import csv
 import os
 
@@ -26,13 +34,16 @@ from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 from src.input_output import save_output
 
 FIELD_MODEL_DIR = "output/field_classifier_v0"
-IMAGE_DIR = "data/titleblock_crops_auto"
-OUTPUT_CSV_PATH = "output/extracted_metadata.csv"
-CONFIDENCE_CSV_PATH = "output/extracted_metadata_confidence.csv"
 
-# 当前模型预测的字段（drawing_name / drawing_types 暂未纳入训练，
-# 见 convert_annotations_to_layoutlm_format.py 里的说明，
-# 队友的save_output()会自动把没出现的列留空，不需要我们额外处理）
+DEFAULT_IMAGE_DIR = "data/titleblock_crops_auto"
+DEFAULT_OUTPUT_CSV_PATH = "output/extracted_metadata.csv"
+DEFAULT_CONFIDENCE_CSV_PATH = "output/extracted_metadata_confidence.csv"
+
+# Fields the current model predicts (drawing_name / drawing_types are not
+# yet part of training -- see the notes in
+# convert_annotations_to_layoutlm_format.py. The teammate's save_output()
+# automatically leaves any missing column blank, so we don't need to
+# handle that ourselves)
 MODEL_FIELDS = [
     "architect",
     "project_name",
@@ -41,6 +52,23 @@ MODEL_FIELDS = [
     "scale",
     "drawing_number",
 ]
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="OCR + field classification, output structured CSV")
+    parser.add_argument(
+        "--image_dir", default=DEFAULT_IMAGE_DIR,
+        help="Folder containing the title block crop images to process (project-relative path or any absolute path)",
+    )
+    parser.add_argument(
+        "--output_csv", default=DEFAULT_OUTPUT_CSV_PATH,
+        help="Path for the main output CSV (teammate's 8-column schema)",
+    )
+    parser.add_argument(
+        "--confidence_csv", default=DEFAULT_CONFIDENCE_CSV_PATH,
+        help="Path for the confidence output CSV",
+    )
+    return parser.parse_args()
 
 
 def normalize_bbox_0_1_to_1000(bbox):
@@ -68,9 +96,9 @@ def extract_words_with_boxes(image_path, ocr_model):
 
 
 def predict_fields(image, words_data, processor, field_model):
-    """对一张图的OCR词列表跑字段分类，返回：
-    { field_name: {"value": "拼接后的文本", "confidence": 平均置信度} }
-    没有被分到任何词的字段，value为空字符串，confidence为None。
+    """Run field classification on one image's OCR word list. Returns:
+    { field_name: {"value": "joined text", "confidence": average confidence} }
+    Fields with no words assigned get value="" and confidence=None.
     """
     id2label = field_model.config.id2label
 
@@ -90,7 +118,7 @@ def predict_fields(image, words_data, processor, field_model):
     predictions = probs.argmax(-1).tolist()
     word_ids = encoding.word_ids(batch_index=0)
 
-    # 每个词取第一个token的预测标签+置信度
+    # Take the first token's prediction + confidence for each word
     word_predictions = {}  # word_idx -> (label, confidence)
     for token_idx, word_idx in enumerate(word_ids):
         if word_idx is None or word_idx in word_predictions:
@@ -99,7 +127,7 @@ def predict_fields(image, words_data, processor, field_model):
         confidence = probs[token_idx][predictions[token_idx]].item()
         word_predictions[word_idx] = (label, confidence)
 
-    # 按字段聚合：同一字段的多个词，文本拼接，置信度取平均
+    # Aggregate by field: join multiple words' text, average their confidence
     field_texts = {f: [] for f in MODEL_FIELDS}
     field_confidences = {f: [] for f in MODEL_FIELDS}
 
@@ -125,46 +153,48 @@ def predict_fields(image, words_data, processor, field_model):
 
 
 def main():
-    os.makedirs(os.path.dirname(OUTPUT_CSV_PATH), exist_ok=True)
+    args = parse_args()
+    os.makedirs(os.path.dirname(args.output_csv) or ".", exist_ok=True)
 
-    print("加载OCR模型...")
+    print("Loading OCR model...")
     ocr_model = ocr_predictor(pretrained=True)
 
-    print("加载字段分类模型...")
+    print("Loading field classification model...")
     processor = LayoutLMv3Processor.from_pretrained(FIELD_MODEL_DIR, apply_ocr=False)
     field_model = LayoutLMv3ForTokenClassification.from_pretrained(FIELD_MODEL_DIR)
     field_model.eval()
 
     image_files = sorted(
-        f for f in os.listdir(IMAGE_DIR)
+        f for f in os.listdir(args.image_dir)
         if f.lower().endswith((".jpg", ".jpeg", ".png"))
     )
 
     if not image_files:
-        print(f"警告：{IMAGE_DIR} 里没有找到图片")
+        print(f"Warning: no images found in {args.image_dir}")
         return
 
-    print(f"共 {len(image_files)} 张图待处理\n")
+    print(f"{len(image_files)} images to process\n")
 
-    main_results = []       # 喂给队友的save_output()
-    confidence_rows = []    # 单独存置信度
+    main_results = []       # fed into the teammate's save_output()
+    confidence_rows = []    # confidence stored separately
 
     for fname in image_files:
-        print(f"处理: {fname}")
-        image_path = os.path.join(IMAGE_DIR, fname)
+        print(f"Processing: {fname}")
+        image_path = os.path.join(args.image_dir, fname)
         image = Image.open(image_path).convert("RGB")
 
         words_data = extract_words_with_boxes(image_path, ocr_model)
         if not words_data:
-            print("  OCR没有提取到文字，跳过")
+            print("  OCR found no text, skipping")
             continue
 
         fields = predict_fields(image, words_data, processor, field_model)
 
-        # 队友save_output()要求的字段（drawing_name/drawing_types模型未预测，
-        # 不填这两个key，save_output会自动留空）
+        # Fields required by the teammate's save_output() (drawing_name /
+        # drawing_types aren't predicted by the model, so those keys are
+        # left out and save_output will fill them in as blank)
         main_row = {field: fields[field]["value"] for field in MODEL_FIELDS}
-        main_row["source_image"] = fname  # 额外列，方便核对，不在队友的8列schema里
+        main_row["source_image"] = fname  # extra column for cross-checking, not part of the teammate's 8-column schema
         main_results.append(main_row)
 
         confidence_row = {"source_image": fname}
@@ -173,21 +203,21 @@ def main():
             confidence_row[f"{field}_confidence"] = f"{conf:.3f}" if conf is not None else ""
         confidence_rows.append(confidence_row)
 
-        print("  完成")
+        print("  Done")
 
-    # 主CSV：交给队友的save_output()，严格按8列schema输出
-    save_output(main_results, OUTPUT_CSV_PATH)
+    # Main CSV: handed to the teammate's save_output(), strictly follows the 8-column schema
+    save_output(main_results, args.output_csv)
 
-    # 置信度单独存一份，不影响队友的输出格式
+    # Confidence saved separately, doesn't affect the teammate's output format
     confidence_fieldnames = ["source_image"] + [f"{f}_confidence" for f in MODEL_FIELDS]
-    with open(CONFIDENCE_CSV_PATH, "w", newline="", encoding="utf-8") as f:
+    with open(args.confidence_csv, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=confidence_fieldnames)
         writer.writeheader()
         writer.writerows(confidence_rows)
 
-    print(f"\n共处理 {len(main_results)} 张图")
-    print(f"主输出（队友格式）: {OUTPUT_CSV_PATH}")
-    print(f"置信度输出: {CONFIDENCE_CSV_PATH}")
+    print(f"\nProcessed {len(main_results)} images")
+    print(f"Main output (teammate's format): {args.output_csv}")
+    print(f"Confidence output: {args.confidence_csv}")
 
 
 if __name__ == "__main__":

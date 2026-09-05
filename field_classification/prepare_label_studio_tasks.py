@@ -1,37 +1,42 @@
 """
 prepare_label_studio_tasks.py
 
-用途：把 data/ocr_words/*.json（docTR提取的词+坐标）转换成
-      Label Studio可导入的任务格式（文本标注），供字段分类标注使用。
+Purpose: Convert data/ocr_words/*.json (words + coordinates extracted by
+         docTR) into a task format importable by Label Studio (text
+         annotation), for use in field classification annotation.
 
-做法：
-  - 把每张图的词按顺序用空格拼成一段文字（Text组件需要一整段文字）
-  - 同时记录每个词对应的字符起止位置（char_start/char_end），
-    存一份映射表，方便标注完成后把"字符范围标签"对应回"具体的词+坐标"
-    （因为最终训练LayoutLMv3需要的是"每个词的字段标签"，不是字符范围）
+Approach:
+  - Join each image's words in order with spaces into a single block of
+    text (the Text component needs one continuous piece of text)
+  - At the same time, record the character start/end position
+    (char_start/char_end) for each word, saving a mapping table so that
+    after annotation is done, the "character range labels" can be mapped
+    back to the "specific word + coordinates" (because training LayoutLMv3
+    ultimately needs "each word's field label", not character ranges)
 
-用法：
+Usage:
     python prepare_label_studio_tasks.py
 
-输出：
-    output/label_studio_import_tasks.json      -> 直接导入Label Studio用
-    data/ocr_words_char_map/*.json             -> 词<->字符位置映射（后处理用）
+Output:
+    output/label_studio_import_tasks.json      -> for direct import into Label Studio
+    data/ocr_words_char_map/*.json             -> word <-> character position mapping (for post-processing)
 """
 
 import json
 import os
 
-INPUT_DIR = "data/ocr_words"
-CHAR_MAP_DIR = "data/ocr_words_char_map"
-TASKS_OUTPUT_PATH = "output/label_studio_import_tasks.json"
+INPUT_DIR = "data/ocr_words_v2"
+CHAR_MAP_DIR = "data/ocr_words_char_map_v2"
+TASKS_OUTPUT_PATH = "output/label_studio_import_tasks_v2.json"
 
 
 def build_text_and_char_map(words):
-    """把词列表拼成一段文字，同时记录每个词的字符起止位置。
-    词与词之间用单个空格分隔。
+    """Join the word list into a single block of text, while recording each
+    word's character start/end position.
+    Words are separated by a single space.
     """
     text_parts = []
-    char_map = []  # 每项: {word_index, text, bbox, char_start, char_end}
+    char_map = []  # each item: {word_index, text, bbox, char_start, char_end}
     cursor = 0
 
     for i, w in enumerate(words):
@@ -62,7 +67,7 @@ def main():
     json_files = sorted(f for f in os.listdir(INPUT_DIR) if f.endswith(".json"))
 
     if not json_files:
-        print(f"警告：{INPUT_DIR} 里没有找到json文件")
+        print(f"Warning: no json files found in {INPUT_DIR}")
         return
 
     tasks = []
@@ -76,13 +81,13 @@ def main():
 
         full_text, char_map = build_text_and_char_map(words)
 
-        # 保存字符映射表，文件名和图片对应
+        # Save the character mapping table, filename corresponds to the image
         map_out_name = os.path.splitext(fname)[0] + "_char_map.json"
         map_out_path = os.path.join(CHAR_MAP_DIR, map_out_name)
         with open(map_out_path, "w", encoding="utf-8") as f:
             json.dump({"source_image": source_image, "char_map": char_map}, f, ensure_ascii=False, indent=2)
 
-        # 构建Label Studio任务
+        # Build the Label Studio task
         tasks.append({
             "data": {
                 "text": full_text,
@@ -90,14 +95,14 @@ def main():
             }
         })
 
-        print(f"{fname}: {len(words)} 个词 -> 文本长度 {len(full_text)} 字符")
+        print(f"{fname}: {len(words)} words -> text length {len(full_text)} characters")
 
     with open(TASKS_OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(tasks, f, ensure_ascii=False, indent=2)
 
-    print(f"\n共生成 {len(tasks)} 个任务")
-    print(f"导入文件: {TASKS_OUTPUT_PATH}")
-    print(f"字符映射表保存在: {CHAR_MAP_DIR}/")
+    print(f"\n{len(tasks)} tasks generated")
+    print(f"Import file: {TASKS_OUTPUT_PATH}")
+    print(f"Character mapping tables saved in: {CHAR_MAP_DIR}/")
 
 
 if __name__ == "__main__":

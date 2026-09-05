@@ -1,9 +1,11 @@
 """
-Title Block Detection - 自动裁剪脚本
-用途：用训练好的检测模型，对图片预测title block位置，并自动裁剪保存
-      这是为了替代之前"手动用预览App裁剪"的步骤，跑通 检测->裁剪 这一环
+Title Block Detection - Auto-Crop Script
+Purpose: Use the trained detection model to predict title block locations in
+         images and automatically crop and save them.
+         This replaces the previous "manually crop with Preview app" step,
+         completing the detect -> crop pipeline.
 
-用法：
+Usage:
     python auto_crop_title_blocks.py
 """
 
@@ -17,10 +19,12 @@ from PIL import Image
 MODEL_PATH = "output/title_block_detector_v0.pth"
 OUTPUT_DIR = "data/titleblock_crops_auto"
 NUM_CLASSES = 2
-SCORE_THRESHOLD = 0.5  # 自动裁剪只信任高置信度的框，避免裁到错误区域
+SCORE_THRESHOLD = 0.5  # Auto-crop only trusts high-confidence boxes, to avoid cropping the wrong region
 
-# 先用当前模型确认能work的5张图（同风格，训练模型见过的图纸系列）
-# 等组员标注更多数据、重新训练模型之后，这里可以换成完整的图片列表
+# First use the current model to confirm it works on 5 images (same style,
+# a drawing series the trained model has already seen).
+# Once teammates annotate more data and the model is retrained, this can be
+# swapped for the full image list.
 IMAGE_PATHS = [
     "data/YFA_cabana_test/455995/1238207_1984-0047-02638-00001.jpg",
     "data/YFA_cabana_test/455992/1238196_1984-0047-02635-00001.jpg",
@@ -29,7 +33,8 @@ IMAGE_PATHS = [
     "data/YFA_cabana_test/455996/1238209_1984-0047-02639-00001.jpg",
 ]
 
-# 裁剪时在预测框基础上留一点边距（像素），避免裁得太紧切掉边缘文字
+# Extra margin (in pixels) added around the predicted box when cropping, to
+# avoid cropping too tightly and cutting off edge text
 PADDING = 20
 
 
@@ -61,15 +66,15 @@ def main():
         scores = prediction["scores"]
 
         if len(scores) == 0 or scores.max() < SCORE_THRESHOLD:
-            print(f"跳过（没有高置信度检测结果）: {os.path.basename(img_path)}")
+            print(f"Skipped (no high-confidence detection): {os.path.basename(img_path)}")
             continue
 
-        # 只取置信度最高的那一个框（title block在一张图里只有一个）
+        # Only take the highest-confidence box (there's only one title block per image)
         best_idx = scores.argmax()
         x1, y1, x2, y2 = boxes[best_idx].tolist()
         score = scores[best_idx].item()
 
-        # 加padding，并确保不越界
+        # Add padding, and make sure it doesn't go out of bounds
         x1 = max(0, x1 - PADDING)
         y1 = max(0, y1 - PADDING)
         x2 = min(image.width, x2 + PADDING)
@@ -81,8 +86,8 @@ def main():
         out_path = os.path.join(OUTPUT_DIR, out_name)
         cropped.save(out_path)
 
-        print(f"{out_name}: 置信度={score:.3f}，裁剪框=({x1:.0f},{y1:.0f},{x2:.0f},{y2:.0f})")
-        print(f"   已保存: {out_path}")
+        print(f"{out_name}: confidence={score:.3f}, crop box=({x1:.0f},{y1:.0f},{x2:.0f},{y2:.0f})")
+        print(f"   Saved: {out_path}")
 
 
 if __name__ == "__main__":

@@ -1,14 +1,15 @@
 """
 train_field_classifier.py
 
-用途：微调LayoutLMv3，对title block裁剪图做字段级token分类
-      （每个词属于哪个字段：architect / project_name / draughtsperson /
-       date / scale / drawing_number，或者不属于任何字段 O）
+Purpose: Fine-tune LayoutLMv3 to do field-level token classification on
+         title block crop images (which field each word belongs to:
+         architect / project_name / draughtsperson / date / scale /
+         drawing_number, or none of them, O)
 
-用法：
+Usage:
     python train_field_classifier.py
 
-依赖：
+Dependencies:
     pip install transformers datasets torch pillow seqeval
 """
 
@@ -24,9 +25,9 @@ from transformers import (
 )
 
 DATA_PATH = "data/layoutlm_training_data.json"
-IMAGE_DIR = "data/titleblock_crops_auto"  # 和OCR用的同一批裁剪图
+IMAGE_DIR = "data/titleblock_crops_auto"  # same batch of crops used for OCR
 
-# 标签集合：O + 6个字段（drawing_name/drawing_types 暂时排除，见转换脚本注释）
+# Label set: O + 6 fields (drawing_name/drawing_types temporarily excluded, see the conversion script's comments)
 LABEL_LIST = [
     "O",
     "architect",
@@ -41,7 +42,8 @@ ID2LABEL = {i: label for i, label in enumerate(LABEL_LIST)}
 
 
 def normalize_bbox_0_1_to_1000(bbox):
-    """LayoutLMv3要求bbox是0-1000整数刻度，我们存的是0-1相对坐标，直接乘1000取整"""
+    """LayoutLMv3 requires bbox on a 0-1000 integer scale; we store 0-1
+    relative coordinates, so just multiply by 1000 and truncate"""
     x0, y0, x1, y1 = bbox
     return [
         max(0, min(1000, int(x0 * 1000))),
@@ -81,25 +83,25 @@ class FieldClassificationDataset(Dataset):
             return_tensors="pt",
         )
 
-        # processor返回的每个tensor都带batch维度(1, ...)，squeeze掉
+        # Each tensor returned by the processor has a batch dimension (1, ...), squeeze it out
         return {k: v.squeeze(0) for k, v in encoding.items()}
 
 
 def main():
-    device = torch.device("cpu")  # 数据量小，CPU即可，避免MPS已知的数值不稳定问题
-    print(f"使用设备: {device}")
+    device = torch.device("cpu")  # small dataset, CPU is enough, avoids MPS's known numerical instability issues
+    print(f"Using device: {device}")
 
-    print("加载LayoutLMv3 processor...")
+    print("Loading LayoutLMv3 processor...")
     processor = LayoutLMv3Processor.from_pretrained(
         "microsoft/layoutlmv3-base", apply_ocr=False
     )
 
     dataset = FieldClassificationDataset(DATA_PATH, IMAGE_DIR, processor)
-    print(f"数据集大小: {len(dataset)} 张图")
+    print(f"Dataset size: {len(dataset)} images")
 
     data_loader = DataLoader(dataset, batch_size=1, shuffle=True)
 
-    print("加载LayoutLMv3模型...")
+    print("Loading LayoutLMv3 model...")
     model = LayoutLMv3ForTokenClassification.from_pretrained(
         "microsoft/layoutlmv3-base",
         num_labels=len(LABEL_LIST),
@@ -110,7 +112,7 @@ def main():
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
 
-    num_epochs = 15  # 数据量小，多跑几轮，同时留意loss是否持续下降而非震荡
+    num_epochs = 15  # small dataset, run more epochs, while watching whether loss keeps decreasing rather than oscillating
 
     model.train()
     for epoch in range(num_epochs):
@@ -122,7 +124,7 @@ def main():
             loss = outputs.loss
 
             if not torch.isfinite(loss):
-                print("警告：loss为nan/inf，跳过本次更新")
+                print("Warning: loss is nan/inf, skipping this update")
                 optimizer.zero_grad()
                 continue
 
@@ -139,7 +141,7 @@ def main():
     save_dir = "output/field_classifier_v0"
     model.save_pretrained(save_dir)
     processor.save_pretrained(save_dir)
-    print(f"\n模型已保存到: {save_dir}")
+    print(f"\nModel saved to: {save_dir}")
 
 
 if __name__ == "__main__":
