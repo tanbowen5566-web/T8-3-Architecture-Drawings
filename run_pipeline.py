@@ -6,25 +6,26 @@ Purpose: End-to-end entry point that chains together the two stages of
            1. Title block detection + crop (Faster R-CNN, v2 model)
            2. OCR + field classification -> structured CSV (docTR + LayoutLMv3)
 
-This replaces running detection/batch_auto_crop_v2.py and
-field_classification/export_fields_to_csv.py separately. Both scripts
-still exist and still work standalone (e.g. if you only want the crops,
-or only want to re-run field classification on crops you already have) --
-this script is a convenience wrapper for the common case of running the
-whole thing on a fresh folder of raw drawings.
+2026-09-14 update: field classification now uses field_classifier_v1
+(84-image training set, early-stopped at the best validation-loss
+checkpoint) instead of field_classifier_v0 (5-image proof of concept).
+On the held-out validation split, v1 gets 100% recall on architect,
+96% on date, 91% on project_name; draughtsperson/drawing_number/scale
+are weaker (62-70%), partly due to a handful of images with incomplete
+annotations rather than purely model error -- see team notes.
 
 Usage:
-    # Folder mode -- arbitrary folder, no metadata.csv required.
-    # Traceability is by filename only (no Node ID available).
-    python run_pipeline.py --input_dir "/Users/dazai/Desktop/SomeFolder" --run_name some_batch
-
     # Dataset mode -- uses the team's iter_images(dataset_name), which
     # reads data/<dataset_name>/metadata.csv and each Node ID's folder.
     # This is the mode that gives Node ID traceability in the output.
     python run_pipeline.py --dataset_name YFA_cabana --run_name yfa_cabana
 
-    # Quick demo run on just the first N images
+    # Quick demo run on just the first N images of a dataset
     python run_pipeline.py --dataset_name YFA_cabana --run_name demo --limit 10
+
+    # Folder mode -- arbitrary folder, no metadata.csv required.
+    # Traceability is by filename only (no Node ID available).
+    python run_pipeline.py --input_dir "/Users/dazai/Desktop/SomeFolder" --run_name some_batch
 
     # Multiple input folders at once are also supported in folder mode
     python run_pipeline.py --input_dir folder1 folder2 --run_name some_batch
@@ -56,7 +57,7 @@ from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 from src.input_output import save_output, iter_images
 
 DETECTOR_MODEL_PATH = "output/title_block_detector_v2.pth"
-FIELD_MODEL_DIR = "output/field_classifier_v0"
+FIELD_MODEL_DIR = "output/field_classifier_v1"
 
 DEFAULT_SOURCE_DIRS = [
     "data/YFA_cabana",
@@ -303,7 +304,7 @@ def classify_fields_to_csv(crop_dir, output_csv_path, confidence_csv_path, node_
     print("Loading OCR model...")
     ocr_model = ocr_predictor(pretrained=True)
 
-    print("Loading field classification model...")
+    print("Loading field classification model (v1)...")
     processor = LayoutLMv3Processor.from_pretrained(FIELD_MODEL_DIR, apply_ocr=False)
     field_model = LayoutLMv3ForTokenClassification.from_pretrained(FIELD_MODEL_DIR)
     field_model.eval()

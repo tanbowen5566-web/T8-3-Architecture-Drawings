@@ -1,46 +1,44 @@
 """
 convert_annotations_to_layoutlm_format.py
 
-Purpose: Take the field classification annotations exported from Label
-         Studio (character ranges + labels), map them back to each word
-         (via char_map), and produce the format needed for LayoutLMv3
-         training: for each image -> a list of words, each with
-         text / bbox / label
+Purpose: Convert Label Studio's character-level field classification
+         annotations back to word-level, using the char_map generated
+         during annotation prep, producing the format needed for
+         LayoutLMv3 training: each image -> list of words, each word
+         with text / bbox / label.
 
-The annotations are character-level (start/end based on the concatenated
-text); char_map records the character range of each word within the
-concatenated text. Here we assign labels to words using an "overlap" check:
-if a word's character range overlaps with an annotation span, that span's
-label is assigned to the word. Words not covered by any span are labeled
-"O" (standard NER convention, meaning "does not belong to any target
+Annotations are character-level (start/end offsets into the joined
+text). char_map records each word's character range within that same
+joined text. We assign a label to a word if its character range
+overlaps a labeled span. Words with no overlapping span get "O"
+(the standard NER "outside" label, meaning "not part of any target
 field").
 
 Usage:
     python convert_annotations_to_layoutlm_format.py
 
 Input:
-    data/field_annotations/project-2-at-2026-08-29-12-04-a62de1c8.json
-    data/ocr_words_char_map/*.json
+    data/project-7-at-2026-09-13-01-26-ff72d5ff.json   (Label Studio export, 84 tasks)
+    data/ocr_words_char_map_v2/*.json
 
 Output:
-    data/layoutlm_training_data.json
+    data/layoutlm_training_data_v2.json
 """
 
 import json
 import os
 
-ANNOTATIONS_PATH = "data/field_annotations/project-2-at-2026-08-29-12-04-a62de1c8.json"
-CHAR_MAP_DIR = "data/ocr_words_char_map"
-OUTPUT_PATH = "data/layoutlm_training_data.json"
+ANNOTATIONS_PATH = "data/project-7-at-2026-09-13-01-26-ff72d5ff.json"
+CHAR_MAP_DIR = "data/ocr_words_char_map_v2"
+OUTPUT_PATH = "data/layoutlm_training_data_v2.json"
 
-# Fields temporarily excluded: during annotation, drawing_name and
-# drawing_types ended up labeled over the same piece of text (overlapping
-# spans), but LayoutLMv3 token classification requires each word to have
-# only one label. The boundary between the two field definitions hasn't
-# been confirmed with the team yet, so skip them for now to get the
-# pipeline running end-to-end.
-# Once the field definitions are confirmed, clear or adjust the line below
-# to bring them back in.
+# Temporarily excluded fields: drawing_name and drawing_types were often
+# labelled on the exact same span of text during annotation (overlapping
+# spans), but LayoutLMv3's token classification requires each word to have
+# exactly one label. The boundary between these two fields still hasn't
+# been confirmed with the team, so we skip them for now to keep the
+# pipeline running. Clear this set (or adjust it) once the field
+# definitions are confirmed and re-annotated cleanly.
 EXCLUDED_FIELDS = {"drawing_name", "drawing_types"}
 
 
@@ -73,9 +71,9 @@ def assign_labels_to_words(char_map, label_spans):
         assigned_label = "O"
         for span in label_spans:
             if spans_overlap(w_start, w_end, span["start"], span["end"]):
-                # In theory a word should only fall inside one annotation
-                # span; if it overlaps multiple, take the first match
-                # (shouldn't happen with correct annotations)
+                # A word should ideally fall inside only one labelled span;
+                # if it overlaps multiple, take the first match found
+                # (shouldn't normally happen with careful annotation)
                 assigned_label = span["labels"][0]
                 break
 
@@ -101,10 +99,10 @@ def main():
         annotations = task.get("annotations", [])
 
         if not annotations:
-            print(f"Skipped (no annotations): {source_image}")
+            print(f"Skipped (no annotation): {source_image}")
             continue
 
-        # Take the first annotator's result (usually only one person annotates)
+        # Take the first annotator's result (usually only one annotator)
         result = annotations[0]["result"]
         label_spans = [
             {
@@ -118,13 +116,13 @@ def main():
 
         char_map = load_char_map_for_image(source_image)
         if char_map is None:
-            print(f"Warning: no matching char_map found: {source_image}")
+            print(f"Warning: no matching char_map found for: {source_image}")
             continue
 
         words_with_labels = assign_labels_to_words(char_map, label_spans)
 
         labeled_count = sum(1 for w in words_with_labels if w["label"] != "O")
-        print(f"{source_image}: {len(words_with_labels)} words, {labeled_count} of which were labeled with a field")
+        print(f"{source_image}: {len(words_with_labels)} words, {labeled_count} labelled with a field")
 
         training_data.append({
             "source_image": source_image,
@@ -135,6 +133,7 @@ def main():
         json.dump(training_data, f, ensure_ascii=False, indent=2)
 
     print(f"\nSaved: {OUTPUT_PATH}")
+    print(f"Total images with usable annotations: {len(training_data)}")
 
 
 if __name__ == "__main__":

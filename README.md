@@ -28,11 +28,13 @@ This tool extracts key metadata (project name, drawing number, scale, drafter, a
   - `Bates_smart_Mccutcheon` is excluded from training/inference for now — these drawings may not have a standard title block region at all, and the images are scanned inconsistently, so this dataset needs separate handling (not yet designed).
   - A cluster of 18 images in `YFA_state_government` (node IDs in the `1264417`–`1264445` range) still fail detection even with the v2 model — likely a shared layout quirk in that batch, not yet investigated.
 
-**Field classification** — `output/field_classifier_v0/`
-- Currently trained on only 5 annotated crops (proof-of-concept scale). A larger batch of 85 auto-cropped images (from the v2 detector) has been OCR'd and prepared for annotation (`field_classification/prepare_label_studio_tasks.py`), but is not yet labelled/trained on.
+**Field classification** — `output/field_classifier_v1/`
+- Retrained on a larger batch of 84 annotated crops (up from the original 5-image proof of concept), using a stratified train/val split by source dataset (17 held out for validation) and early stopping on validation loss — training past ~epoch 3 overfits noticeably (train loss keeps falling while val loss gets worse), so the checkpoint with the lowest validation loss is saved automatically rather than just the final epoch.
+- On the held-out validation split (17 images the model never trained on), per-field recall: `architect` 100%, `date` 96%, `project_name` 91%, `scale` 70%, `drawing_number` 64%, `draughtsperson` 62%. This is a large improvement over the 5-image model, which essentially failed to generalize to any unseen image at all.
+- Some of the weaker fields' apparent error rate is inflated by a handful of specific images with incomplete annotation (e.g. one image had only 4 of ~20 expected fields labelled) rather than genuine model failure — worth a spot-check/re-annotation pass on the sparsely-labelled images before drawing firm conclusions about `scale`/`drawing_number`/`draughtsperson` specifically.
 - `drawing_name` and `drawing_types` are excluded from the current model. In annotation, these two fields were often labelled on the same span of text, which conflicts with LayoutLMv3's one-label-per-word setup — needs a team decision on how the two fields should be defined/scoped before re-including them.
 - Classification is fairly robust to OCR misreadings (a word can still be routed to the right field even if its text is garbled), but the *value* written to the CSV is only as accurate as the OCR output — this is a separate, still-open problem (see below).
-- Fields with highly variable values (`date`, `draughtsperson`) generalize worse than fields with consistent boilerplate text (`architect`, `project_name`) — the model tends to memorise specific values seen in training rather than the pattern. More annotated examples with varied dates/names should help.
+- Fields with highly variable values (`date`, `draughtsperson`) still generalize somewhat worse than fields with consistent boilerplate text (`architect`, `project_name`) — more annotated examples with varied dates/names should help further.
 
 **OCR** — known issue: handwritten or stylised characters are sometimes misread (e.g. a fraction like `1/4` read as `V4`). This doesn't reliably break field classification (the word still gets routed to the right field based on position/context) but does corrupt the actual extracted value. Not yet addressed — options under consideration: surfacing per-word OCR confidence in the output for manual review, or field-specific validation rules.
 
@@ -131,7 +133,7 @@ Both accept no arguments too, in which case they fall back to the original defau
 When a new batch of Label Studio annotations comes in:
 
 - **Title block detection**: add the new batch's export folder to `ANNOTATION_BATCHES` in `detection/merge_title_block_annotations.py`, run it to produce a de-duplicated `data/merged_title_block_annotations.json`, then run `detection/train_title_block_detector.py`.
-- **Field classification**: convert the new annotation export with `field_classification/convert_annotations_to_layoutlm_format.py`, then run `field_classification/train_field_classifier.py`.
+- **Field classification**: convert the new annotation export with `field_classification/convert_annotations_to_layoutlm_format.py`, then run `field_classification/train_field_classifier.py`. This script fixes all random seeds (data split, shuffling, classifier head init) so runs are reproducible, and saves the checkpoint with the lowest validation loss rather than the final epoch, since this model overfits after only a few epochs at current data volumes.
 
 Training currently runs on CPU (MPS has a known numerical instability issue with torchvision's detection models that produces NaN losses). For larger datasets going forward, consider moving training to a cloud GPU (e.g. Google Colab) rather than running long jobs locally.
 

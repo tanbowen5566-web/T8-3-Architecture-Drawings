@@ -10,6 +10,9 @@ Purpose: Run the full "OCR + field classification" pipeline on a batch
          don't want to modify the teammate's shared code / affect other
          modules).
 
+2026-09-14 update: uses field_classifier_v1 (84-image training set)
+instead of field_classifier_v0 (5-image proof of concept).
+
 Usage:
     # Use the default path (data/titleblock_crops_auto)
     python export_fields_to_csv.py
@@ -33,7 +36,7 @@ from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 
 from src.input_output import save_output
 
-FIELD_MODEL_DIR = "output/field_classifier_v0"
+FIELD_MODEL_DIR = "output/field_classifier_v1"
 
 DEFAULT_IMAGE_DIR = "data/titleblock_crops_auto"
 DEFAULT_OUTPUT_CSV_PATH = "output/extracted_metadata.csv"
@@ -118,8 +121,7 @@ def predict_fields(image, words_data, processor, field_model):
     predictions = probs.argmax(-1).tolist()
     word_ids = encoding.word_ids(batch_index=0)
 
-    # Take the first token's prediction + confidence for each word
-    word_predictions = {}  # word_idx -> (label, confidence)
+    word_predictions = {}
     for token_idx, word_idx in enumerate(word_ids):
         if word_idx is None or word_idx in word_predictions:
             continue
@@ -127,7 +129,6 @@ def predict_fields(image, words_data, processor, field_model):
         confidence = probs[token_idx][predictions[token_idx]].item()
         word_predictions[word_idx] = (label, confidence)
 
-    # Aggregate by field: join multiple words' text, average their confidence
     field_texts = {f: [] for f in MODEL_FIELDS}
     field_confidences = {f: [] for f in MODEL_FIELDS}
 
@@ -159,7 +160,7 @@ def main():
     print("Loading OCR model...")
     ocr_model = ocr_predictor(pretrained=True)
 
-    print("Loading field classification model...")
+    print("Loading field classification model (v1)...")
     processor = LayoutLMv3Processor.from_pretrained(FIELD_MODEL_DIR, apply_ocr=False)
     field_model = LayoutLMv3ForTokenClassification.from_pretrained(FIELD_MODEL_DIR)
     field_model.eval()
@@ -175,8 +176,8 @@ def main():
 
     print(f"{len(image_files)} images to process\n")
 
-    main_results = []       # fed into the teammate's save_output()
-    confidence_rows = []    # confidence stored separately
+    main_results = []
+    confidence_rows = []
 
     for fname in image_files:
         print(f"Processing: {fname}")
@@ -190,11 +191,8 @@ def main():
 
         fields = predict_fields(image, words_data, processor, field_model)
 
-        # Fields required by the teammate's save_output() (drawing_name /
-        # drawing_types aren't predicted by the model, so those keys are
-        # left out and save_output will fill them in as blank)
         main_row = {field: fields[field]["value"] for field in MODEL_FIELDS}
-        main_row["source_image"] = fname  # extra column for cross-checking, not part of the teammate's 8-column schema
+        main_row["source_image"] = fname
         main_results.append(main_row)
 
         confidence_row = {"source_image": fname}
@@ -205,10 +203,8 @@ def main():
 
         print("  Done")
 
-    # Main CSV: handed to the teammate's save_output(), strictly follows the 8-column schema
     save_output(main_results, args.output_csv)
 
-    # Confidence saved separately, doesn't affect the teammate's output format
     confidence_fieldnames = ["source_image"] + [f"{f}_confidence" for f in MODEL_FIELDS]
     with open(args.confidence_csv, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=confidence_fieldnames)
