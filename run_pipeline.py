@@ -14,6 +14,31 @@ On the held-out validation split, v1 gets 100% recall on architect,
 are weaker (62-70%), partly due to a handful of images with incomplete
 annotations rather than purely model error -- see team notes.
 
+2026-09-14 update (2): drawing_types is now derived from the
+drawing_name text via keyword matching against the client's fixed
+vocabulary (Elevation / Perspective / Plan / Section / Detail --
+see https://en.wikipedia.org/wiki/Architectural_drawing). This only
+covers drawings whose title already states the type (~78% of the
+84-image annotation batch) -- the client explicitly noted that older
+drawings often do NOT state the type in the title, which keyword
+matching can't help with at all (nothing to match against). Those
+cases, plus titles matching a keyword outside the 5-category vocabulary
+(e.g. "SCHEDULE"), are left unclassified here (drawing_types blank,
+needs_manual_review = True) pending a visual/content-based classifier
+(CLIP was tried and discriminated poorly on these hand-drafted line
+drawings; TU Darmstadt's DrawingClassifiers project -- 3 of 5
+categories -- is a candidate but not yet verified runnable). See
+drawing_type_classification/ for the exploration scripts this was
+developed from, including the CLIP attempt.
+
+This also switches to field_classifier_v2, which re-includes
+drawing_name in training (previously excluded alongside drawing_types
+due to the same annotation-span conflict -- see
+convert_annotations_to_layoutlm_format.py's notes for why only
+drawing_types needs to stay excluded now). On the held-out validation
+split, v2 gets 88% recall on drawing_name, and every other field's
+recall also improved over v1 (e.g. scale 70% -> 90%).
+
 Usage:
     # Dataset mode -- uses the team's iter_images(dataset_name), which
     # reads data/<dataset_name>/metadata.csv and each Node ID's folder.
@@ -38,6 +63,7 @@ This creates:
     output/batch_crop_<run_name>_failed.txt       images where detection failed
     output/extracted_metadata_<run_name>.csv      main output (team's 8-column schema)
     output/extracted_metadata_<run_name>_confidence.csv   per-field confidence + Node ID
+                                                   + drawing_types_source + needs_manual_review
                                                    (Node ID column is only populated in
                                                    dataset mode; blank in folder mode)
 """
@@ -57,7 +83,7 @@ from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 from src.input_output import save_output, iter_images
 
 DETECTOR_MODEL_PATH = "output/title_block_detector_v2.pth"
-FIELD_MODEL_DIR = "output/field_classifier_v1"
+FIELD_MODEL_DIR = "output/field_classifier_v2"
 
 DEFAULT_SOURCE_DIRS = [
     "data/YFA_cabana",
@@ -70,6 +96,8 @@ DETECTOR_NUM_CLASSES = 2
 DETECTION_SCORE_THRESHOLD = 0.5  # Only trust high-confidence boxes for auto-cropping
 CROP_PADDING = 20
 
+# drawing_name is now included so drawing_types can be derived from it
+# below; drawing_types itself is never predicted by the LayoutLMv3 model.
 MODEL_FIELDS = [
     "architect",
     "project_name",
@@ -77,7 +105,36 @@ MODEL_FIELDS = [
     "date",
     "scale",
     "drawing_number",
+    "drawing_name",
 ]
+
+# Client's fixed drawing_types vocabulary. Order matters: a title can
+# contain more than one keyword (e.g. "ELEVATIONS - SECTION STRUCTURAL
+# ROOF..."), so this is checked in order and the FIRST match wins.
+# See drawing_type_classification/keyword_drawing_types.py for the
+# standalone version this was developed from, including a spot-check
+# script against the annotation export.
+DRAWING_TYPE_KEYWORDS = [
+    ("PERSPECTIVE", "Perspective"),
+    ("ELEVATION", "Elevation"),
+    ("SECTION", "Section"),
+    ("DETAIL", "Detail"),
+    ("PLAN", "Plan"),
+]
+
+
+def classify_drawing_type_from_text(drawing_name_text):
+    """Returns one of the 5 official labels, or None if no keyword in the
+    text matches the client's vocabulary (blank text, a bare drawing
+    number, or something outside the 5 categories like a schedule).
+    None means: needs a visual classifier or manual review, don't guess."""
+    if not drawing_name_text:
+        return None
+    text_upper = drawing_name_text.upper()
+    for keyword, label in DRAWING_TYPE_KEYWORDS:
+        if keyword in text_upper:
+            return label
+    return None
 
 
 def parse_args():
@@ -304,7 +361,7 @@ def classify_fields_to_csv(crop_dir, output_csv_path, confidence_csv_path, node_
     print("Loading OCR model...")
     ocr_model = ocr_predictor(pretrained=True)
 
-    print("Loading field classification model (v1)...")
+    print("Loading field classification model (v2)...")
     processor = LayoutLMv3Processor.from_pretrained(FIELD_MODEL_DIR, apply_ocr=False)
     field_model = LayoutLMv3ForTokenClassification.from_pretrained(FIELD_MODEL_DIR)
     field_model.eval()
@@ -341,6 +398,27 @@ def classify_fields_to_csv(crop_dir, output_csv_path, confidence_csv_path, node_
         # source_image / Node ID can't live in the main CSV -- they go in
         # the confidence CSV instead, which we fully control.
         main_row = {field: fields[field]["value"] for field in MODEL_FIELDS}
+
+        # drawing_types: keyword match against the drawing_name text this
+        # model just extracted. A match is a deterministic text lookup, not
+        # a probabilistic guess, so it gets full confidence (1.0). No match
+        # means the title doesn't state a type (or names something outside
+        # the 5-category vocabulary, e.g. a schedule) -- flagged for manual
+        # review rather than guessed, since there's no visual classifier
+        # wired in yet to attempt these.
+        drawing_name_text = fields["drawing_name"]["value"]
+        drawing_types_label = classify_drawing_type_from_text(drawing_name_text)
+        if drawing_types_label is not None:
+            main_row["drawing_types"] = drawing_types_label
+            drawing_types_confidence = 1.0
+            drawing_types_source = "keyword"
+            needs_manual_review = False
+        else:
+            main_row["drawing_types"] = ""
+            drawing_types_confidence = None
+            drawing_types_source = "unmatched"
+            needs_manual_review = True
+
         main_results.append(main_row)
 
         confidence_row = {
@@ -350,13 +428,22 @@ def classify_fields_to_csv(crop_dir, output_csv_path, confidence_csv_path, node_
         for field in MODEL_FIELDS:
             conf = fields[field]["confidence"]
             confidence_row[f"{field}_confidence"] = f"{conf:.3f}" if conf is not None else ""
+        confidence_row["drawing_types_confidence"] = (
+            f"{drawing_types_confidence:.3f}" if drawing_types_confidence is not None else ""
+        )
+        confidence_row["drawing_types_source"] = drawing_types_source
+        confidence_row["needs_manual_review"] = needs_manual_review
         confidence_rows.append(confidence_row)
 
         print("  Done")
 
     save_output(main_results, output_csv_path)
 
-    confidence_fieldnames = ["source_image", "node_id"] + [f"{f}_confidence" for f in MODEL_FIELDS]
+    confidence_fieldnames = (
+        ["source_image", "node_id"]
+        + [f"{f}_confidence" for f in MODEL_FIELDS]
+        + ["drawing_types_confidence", "drawing_types_source", "needs_manual_review"]
+    )
     with open(confidence_csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=confidence_fieldnames)
         writer.writeheader()

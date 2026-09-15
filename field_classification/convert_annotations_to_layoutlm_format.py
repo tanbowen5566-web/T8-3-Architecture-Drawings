@@ -22,7 +22,7 @@ Input:
     data/ocr_words_char_map_v2/*.json
 
 Output:
-    data/layoutlm_training_data_v2.json
+    data/layoutlm_training_data_v3.json   (v3: drawing_name re-included, only drawing_types excluded)
 """
 
 import json
@@ -30,16 +30,21 @@ import os
 
 ANNOTATIONS_PATH = "data/project-7-at-2026-09-13-01-26-ff72d5ff.json"
 CHAR_MAP_DIR = "data/ocr_words_char_map_v2"
-OUTPUT_PATH = "data/layoutlm_training_data_v2.json"
+OUTPUT_PATH = "data/layoutlm_training_data_v3.json"
 
-# Temporarily excluded fields: drawing_name and drawing_types were often
-# labelled on the exact same span of text during annotation (overlapping
-# spans), but LayoutLMv3's token classification requires each word to have
-# exactly one label. The boundary between these two fields still hasn't
-# been confirmed with the team, so we skip them for now to keep the
-# pipeline running. Clear this set (or adjust it) once the field
-# definitions are confirmed and re-annotated cleanly.
-EXCLUDED_FIELDS = {"drawing_name", "drawing_types"}
+# Temporarily excluded field: drawing_types alone. It used to be paired
+# with drawing_name (both excluded) because the two were often labelled
+# on the exact same span of text -- LayoutLMv3 can only give a word one
+# label, so that was a real conflict. But drawing_types is no longer
+# something we ask LayoutLMv3 to predict at all: it's now derived as a
+# post-processing step (keyword matching against the drawing_name text
+# the model extracts, falling back to manual review when no keyword
+# matches -- see run_pipeline.py). That removes the actual conflict, so
+# drawing_name can be trained normally again; only drawing_types itself
+# stays excluded, since we still don't want LayoutLMv3 trying to learn a
+# label that was never annotated at all in the 84-image batch anyway
+# (see the drawing_name-vs-drawing_types annotation audit findings).
+EXCLUDED_FIELDS = {"drawing_types"}
 
 
 def spans_overlap(a_start, a_end, b_start, b_end):
