@@ -99,7 +99,7 @@ python run_pipeline.py --dataset_name YFA_cabana --run_name demo --limit 10
 
 # Folder mode: process an arbitrary folder of raw drawings (e.g. one on
 # the Desktop). No metadata.csv required, but no Node ID traceability either.
-python run_pipeline.py --input_dir "</Users/dazai/Desktop/SomeFolder>" --run_name <some_batch>
+python run_pipeline.py --input_dir "</Users/dazai/Desktop/SomeFolder>" --run_name <output_filename>
 ```
 
 Each run produces, named after `--run_name`:
