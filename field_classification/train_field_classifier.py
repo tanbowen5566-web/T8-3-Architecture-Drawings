@@ -6,14 +6,17 @@ Purpose: Fine-tune LayoutLMv3 to classify each word in a title block
          draughtsperson / date / scale / drawing_number), or "O" if it
          doesn't belong to any of them.
 
-2026-09-13 update: retrained on the larger 84-image annotation batch
-(project-7), using a stratified train/val split by source dataset
-(YFA_cabana vs YFA_state_government). The first run of this larger
-dataset showed clear overfitting -- train loss kept falling smoothly
-while val loss bottomed out around epoch 3 and then got worse for the
-rest of training. So this version tracks the best validation loss seen
-so far and saves that checkpoint, instead of just saving whatever the
-last epoch happens to be.
+2026-09-14 update: retrained again (v2) with drawing_name re-included
+in the label set. drawing_name and drawing_types used to be excluded
+together because they were often annotated on the same text span
+(a conflict for one-label-per-word classification). But drawing_types
+is no longer something we ask this model to predict at all -- it's now
+derived downstream via keyword matching on the drawing_name text this
+model extracts (see run_pipeline.py), with a manual-review fallback
+when no keyword matches. That removes the actual conflict, so
+drawing_name goes back into training; only drawing_types itself stays
+excluded (see convert_annotations_to_layoutlm_format.py's
+EXCLUDED_FIELDS).
 
 Usage:
     python train_field_classifier.py
@@ -41,11 +44,12 @@ SEED = 42  # fixes: train/val split order, DataLoader shuffling, and the
            # same data/code produced very different training trajectories
            # (one learned reasonably, one got stuck and barely moved)
 
-DATA_PATH = "data/layoutlm_training_data_v2.json"
+DATA_PATH = "data/layoutlm_training_data_v3.json"
 IMAGE_DIR = "data/titleblock_crops_v2"  # the crops these annotations were made on
 
-# Label set: O + 6 fields (drawing_name/drawing_types temporarily excluded,
-# see the notes in convert_annotations_to_layoutlm_format.py)
+# Label set: O + 7 fields. drawing_name is back in (see update note
+# above); drawing_types stays excluded -- it's derived separately by
+# keyword-matching the drawing_name text, not predicted by this model.
 LABEL_LIST = [
     "O",
     "architect",
@@ -54,6 +58,7 @@ LABEL_LIST = [
     "date",
     "scale",
     "drawing_number",
+    "drawing_name",
 ]
 LABEL2ID = {label: i for i, label in enumerate(LABEL_LIST)}
 ID2LABEL = {i: label for i, label in enumerate(LABEL_LIST)}
@@ -184,7 +189,7 @@ def main():
     num_epochs = 15
     best_val_loss = float("inf")
     best_epoch = -1
-    save_dir = "output/field_classifier_v1"
+    save_dir = "output/field_classifier_v2"
 
     for epoch in range(num_epochs):
         model.train()

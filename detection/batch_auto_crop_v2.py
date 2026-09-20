@@ -23,7 +23,7 @@ Usage:
     python batch_auto_crop_v2.py
 
     # Point at any folder (e.g. a new folder on the Desktop)
-    python batch_auto_crop_v2.py --input_dir "/Users/dazai/Desktop/SomeFolder" --output_dir data/titleblock_crops_some_batch
+    python batch_auto_crop_v2.py --input_dir "/path/to/SomeFolder" --output_dir data/titleblock_crops_some_batch
 
     # Multiple input folders at once are also supported
     python batch_auto_crop_v2.py --input_dir folder1 folder2 --output_dir data/some_output_folder

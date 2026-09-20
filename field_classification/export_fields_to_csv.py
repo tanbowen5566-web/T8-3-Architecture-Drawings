@@ -36,7 +36,7 @@ from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 
 from src.input_output import save_output
 
-FIELD_MODEL_DIR = "output/field_classifier_v1"
+FIELD_MODEL_DIR = "output/field_classifier_v2"  # same model as run_pipeline.py
 
 DEFAULT_IMAGE_DIR = "data/titleblock_crops_auto"
 DEFAULT_OUTPUT_CSV_PATH = "output/extracted_metadata.csv"
@@ -54,6 +54,7 @@ MODEL_FIELDS = [
     "date",
     "scale",
     "drawing_number",
+    "drawing_name",
 ]
 
 
@@ -160,7 +161,7 @@ def main():
     print("Loading OCR model...")
     ocr_model = ocr_predictor(pretrained=True)
 
-    print("Loading field classification model (v1)...")
+    print("Loading field classification model (v2)...")
     processor = LayoutLMv3Processor.from_pretrained(FIELD_MODEL_DIR, apply_ocr=False)
     field_model = LayoutLMv3ForTokenClassification.from_pretrained(FIELD_MODEL_DIR)
     field_model.eval()

@@ -225,3 +225,6 @@ output/
 output/
 *.pth
 data/project-1-at-*
+
+# Model files staged for upload to a GitHub Release (see download_models.py)
+release_assets/

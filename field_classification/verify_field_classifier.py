@@ -19,10 +19,10 @@ import torch
 from PIL import Image, ImageDraw
 from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 
-MODEL_DIR = "output/field_classifier_v1"
-DATA_PATH = "data/layoutlm_training_data_v2.json"
+MODEL_DIR = "output/field_classifier_v2"
+DATA_PATH = "data/layoutlm_training_data_v3.json"
 IMAGE_DIR = "data/titleblock_crops_v2"
-OUTPUT_DIR = "output/field_predictions_v1_val_visualized"
+OUTPUT_DIR = "output/field_predictions_v2_val_visualized"
 
 LABEL_COLORS = {
     "architect": "#FF6B6B",
@@ -31,6 +31,7 @@ LABEL_COLORS = {
     "date": "#F7DC6F",
     "scale": "#BB8FCE",
     "drawing_number": "#98D8C8",
+    "drawing_name": "#F1948A",
 }
 
 # The 17 validation images under seed=42 + stratified split (same logic as
