@@ -10,6 +10,7 @@ This script will automatically:
     1. Check that the installed Python version meets the requirement
     2. Create a virtual environment (venv)
     3. Install dependencies from requirements.txt
+    4. Download the trained models from the GitHub Release (download_models.py)
 
 No need to distinguish between Mac / Windows — the script detects
 the current OS automatically.
@@ -23,7 +24,7 @@ import platform
 # ---- Config ----
 VENV_DIR = "venv"
 REQUIREMENTS_FILE = "requirements.txt"
-MIN_PYTHON_VERSION = (3, 11)  # docTR requires Python 3.11+
+MIN_PYTHON_VERSION = (3, 11)  # matches README; docTR 1.x, torch and transformers all support 3.11+
 
 
 def print_step(msg):
@@ -131,6 +132,21 @@ def install_requirements():
         sys.exit(1)
 
 
+def download_models():
+    """Fetch the trained model files. A failure here is not fatal: the
+    environment is still usable and download_models.py can be re-run."""
+    print_step("Downloading trained models (large files, needs internet access)...")
+    result = subprocess.run([get_venv_executable("python"), "download_models.py"])
+    if result.returncode == 0:
+        print_success("Models downloaded")
+    else:
+        print_error(
+            "Model download failed. The environment is otherwise ready; retry later with:\n"
+            "    python download_models.py\n"
+            "If the repository is private, set the GITHUB_TOKEN environment variable first."
+        )
+
+
 def print_activation_instructions():
     print_step("Setup complete!")
 
@@ -142,8 +158,9 @@ def print_activation_instructions():
     print(
         f"\nActivate the virtual environment with:\n"
         f"    {activate_cmd}\n"
-        f"\nThen you can run the project scripts, e.g.:\n"
-        f"    python your_script.py\n"
+        f"\nThen run the pipeline, e.g.:\n"
+        f"    python run_pipeline.py --input_dir <folder_of_drawings> --run_name demo\n"
+        f"\nNote: docTR downloads its OCR weights on first run (internet needed once).\n"
     )
 
 
@@ -156,6 +173,7 @@ def main():
     check_requirements_file()
     create_venv()
     install_requirements()
+    download_models()
     print_activation_instructions()
 
 

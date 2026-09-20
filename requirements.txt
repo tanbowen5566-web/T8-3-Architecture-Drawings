@@ -1,7 +1,12 @@
-python-doctr[torch,viz]
-numpy==2.5.2
-pandas==3.0.5
-pillow==12.3.0
-python-dateutil==2.9.0.post0
-six==1.17.0
-tzdata==2026.3
+# Core runtime (pipeline: detection -> docTR OCR -> LayoutLMv3 field classification -> CSV)
+python-doctr>=1.0            # OCR (also pulls in opencv-python-headless)
+torch>=2.2
+torchvision>=0.17                # title block detector (Faster R-CNN)
+transformers>=4.40               # LayoutLMv3 field classifier
+numpy>=1.26
+pandas>=2.1
+pillow>=10.2
+
+# Optional: only needed for drawing_type_classification/evaluate_tu_darmstadt_model.py
+# (uncomment or run `pip install tensorflow` yourself if you need it)
+# tensorflow>=2.16

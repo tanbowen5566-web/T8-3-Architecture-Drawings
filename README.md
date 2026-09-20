@@ -27,6 +27,7 @@ python setup.py
 1. Checks your Python version
 2. Creates a virtual environment (`venv/`)
 3. Installs all dependencies from `requirements.txt`
+4. Downloads the trained models from the GitHub Release into `output/` (see [Models](#models))
 
 This works on both **Mac/Linux** and **Windows** — no need to run separate scripts.
 
@@ -107,6 +108,29 @@ Training currently runs on CPU (MPS has a known numerical instability issue with
 
 > Note: the original plan called for RT-DETR for detection. We switched to a fine-tuned Faster R-CNN (torchvision) for the current models — RT-DETR can still be revisited later if detection accuracy needs to improve further.
 
+## Models
+
+Everything the pipeline uses, and where each model comes from:
+
+| Stage | Model | File / source | Size | Distribution |
+|---|---|---|---|---|
+| Title block detection | Faster R-CNN ResNet-50 FPN, fine-tuned (v2) | `output/title_block_detector_v2.pth` | 158 MB | GitHub Release `models-v2` |
+| OCR | docTR `ocr_predictor(pretrained=True)` (default detection + recognition models) | downloaded automatically on first run | — | docTR / internet, once |
+| Field classification | LayoutLMv3 token classifier, fine-tuned (v2) | `output/field_classifier_v2/` | 478 MB | GitHub Release `models-v2` |
+
+Older versions (`title_block_detector_v0/v1`, `field_classifier_v0/v1`) are kept locally by the model authors only, are superseded by v2, and are not distributed. `train_title_block_detector.py` also starts from torchvision's COCO-pretrained Faster R-CNN weights (training only; downloaded automatically).
+
+The two fine-tuned models exceed GitHub's 100 MB per-file limit, so they are published as **GitHub Release assets** rather than committed to git. `python setup.py` downloads them into `output/` automatically (via `download_models.py`, with checksum verification). To fetch or re-fetch them on their own:
+
+```bash
+python download_models.py            # downloads only what is missing
+python download_models.py --force    # re-download everything
+```
+
+If the repository is private, set `GITHUB_TOKEN` (a token with read access to the repo) before running it. Internet access is needed once; the pipeline itself runs fully offline afterwards.
+
+**Publishing a new model version** (maintainers): create a new Release (e.g. tag `models-v3`), upload the new `.pth` file and a zip of the field classifier folder (the zip must contain a top-level `field_classifier_vN/` folder), then update `RELEASE_TAG`, the `MODELS` names + `shasum -a 256` checksums in `download_models.py`, and the model paths in `run_pipeline.py`.
+
 ## Current Status
 
 **Title block detection** — `output/title_block_detector_v2.pth`
@@ -117,7 +141,7 @@ Training currently runs on CPU (MPS has a known numerical instability issue with
   - `Bates_smart_Mccutcheon` is excluded from training/inference for now — these drawings may not have a standard title block region at all, and the images are scanned inconsistently, so this dataset needs separate handling (not yet designed).
   - A cluster of 18 images in `YFA_state_government` (node IDs in the `1264417`–`1264445` range) still fail detection even with the v2 model — likely a shared layout quirk in that batch, not yet investigated.
 
-**Field classification** — `output/field_classifier_v1/`
+**Field classification** — `output/field_classifier_v2/` (the v1 figures below are historical; v2 re-includes `drawing_name` and improves every field, e.g. `scale` recall 70% → 90%, see the notes in `run_pipeline.py`)
 - Retrained on a larger batch of 84 annotated crops (up from the original 5-image proof of concept), using a stratified train/val split by source dataset (17 held out for validation) and early stopping on validation loss — training past ~epoch 3 overfits noticeably (train loss keeps falling while val loss gets worse), so the checkpoint with the lowest validation loss is saved automatically rather than just the final epoch.
 - On the held-out validation split (17 images the model never trained on), per-field recall: `architect` 100%, `date` 96%, `project_name` 91%, `scale` 70%, `drawing_number` 64%, `draughtsperson` 62%. This is a large improvement over the 5-image model, which essentially failed to generalize to any unseen image at all.
 - Some of the weaker fields' apparent error rate is inflated by a handful of specific images with incomplete annotation (e.g. one image had only 4 of ~20 expected fields labelled) rather than genuine model failure — worth a spot-check/re-annotation pass on the sparsely-labelled images before drawing firm conclusions about `scale`/`drawing_number`/`draughtsperson` specifically.
@@ -144,12 +168,9 @@ It provides one image record at a time (including `node_id`), so the Core does n
 
 ## Notes
 
-- First run will download model weights (docTR, LayoutLMv3, torchvision Faster R-CNN) — this requires an internet connection **once**. After that, the models are cached locally and can run fully offline.
-- Do not commit the `venv/`, `data/`, or `output/` folders, or any `.pth` model weight files — all excluded via `.gitignore`. Trained models currently only exist locally on the machine that trained them; share them directly (e.g. via cloud storage) if a teammate needs to use them without retraining.
-- If you're contributing new dependencies, regenerate `requirements.txt` with:
-  ```bash
-  pip freeze > requirements.txt
-  ```
+- Setup (`python setup.py`) downloads our trained models from the GitHub Release, and the first pipeline run downloads docTR's OCR weights — both need an internet connection **once**. After that, everything runs fully offline. See [Models](#models).
+- Do not commit the `venv/`, `data/`, or `output/` folders, or any `.pth` model weight files — all excluded via `.gitignore`. Trained models are distributed through GitHub Releases instead (see [Models](#models)).
+- If you add a dependency, add it to `requirements.txt` by hand with a minimum version (e.g. `foo>=1.2`). Avoid `pip freeze > requirements.txt` — it pins every transitive package to your machine's exact versions and breaks installs on other OSes.
 
 ## Project Structure
 
@@ -163,6 +184,7 @@ It provides one image record at a time (including `node_id`), so the Core does n
 ├── data/                 # Drawing dataset and annotations (not tracked in git)
 ├── output/               # Trained model weights and generated CSVs (not tracked in git)
 ├── requirements.txt      # Python dependencies
-├── setup.py              # Cross-platform environment setup script
+├── setup.py              # Cross-platform environment setup script (venv + dependencies + models)
+├── download_models.py    # Downloads trained models from the GitHub Release into output/
 └── README.md
 ```
