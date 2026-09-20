@@ -11,9 +11,12 @@ Usage:
     python download_models.py            # download anything that is missing
     python download_models.py --force    # re-download everything
 
-If the repository is private, set a GitHub token with read access first:
-    export GITHUB_TOKEN=<token>          # Mac/Linux
-    set GITHUB_TOKEN=<token>             # Windows (cmd)
+The repository is private, so a GitHub login is needed. The token is taken from,
+in order:
+    1. the GITHUB_TOKEN environment variable
+           export GITHUB_TOKEN=<token>   # Mac/Linux
+           set GITHUB_TOKEN=<token>      # Windows (cmd)
+    2. the GitHub CLI, if installed and logged in (`gh auth login`)
 
 Only the Python standard library is used, so this works before/without
 installing requirements.txt. Internet access is needed once; after that the
@@ -28,13 +31,15 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.request
 import zipfile
 
 REPO = "tanbowen5566-web/T8-3-Architecture-Drawings"
-RELEASE_TAG = "models-v2"
+RELEASE_TAG = "model-v2"
 OUTPUT_DIR = "output"
 
 # asset name -> {sha256, path that must exist afterwards, unzip?}
@@ -50,6 +55,24 @@ MODELS = {
         "unzip": True,  # zip contains a top-level field_classifier_v2/ folder
     },
 }
+
+
+def get_token():
+    """GITHUB_TOKEN if set, else the GitHub CLI's login (`gh auth token`), else None."""
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        return token
+    if shutil.which("gh"):
+        try:
+            result = subprocess.run(
+                ["gh", "auth", "token"], capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                print("Using the GitHub CLI login (gh auth token)")
+                return result.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return None
 
 
 def sha256_of(path):
@@ -104,7 +127,7 @@ def main():
     parser.add_argument("--force", action="store_true", help="re-download even if the files already exist")
     args = parser.parse_args()
 
-    token = os.environ.get("GITHUB_TOKEN")
+    token = get_token()
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     for name, info in MODELS.items():
@@ -119,7 +142,7 @@ def main():
         except urllib.error.HTTPError as e:
             hint = ""
             if e.code in (401, 403, 404) and not token:
-                hint = " If the repository is private, set the GITHUB_TOKEN environment variable and retry."
+                hint = " The repository is private: run `gh auth login` (GitHub CLI) or set the GITHUB_TOKEN environment variable, then retry."
             print(f"  Failed: HTTP {e.code} {e.reason}.{hint}")
             sys.exit(1)
         except (urllib.error.URLError, FileNotFoundError) as e:

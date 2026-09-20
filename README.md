@@ -10,10 +10,20 @@ This tool extracts key metadata (project name, drawing number, scale, drafter, a
 
 ## Getting Started
 
-### Prerequisites
+### What you need to do (checklist)
 
-- Python 3.11 or higher
-- Git
+The repository is **private**, and the trained models (~630 MB) are not in git — they are downloaded from the repo's GitHub Release. So each team member needs:
+
+1. **Access to the repository** — you must be added as a collaborator on GitHub (ask the repo owner).
+2. **Python 3.11+** and **Git**.
+3. **A GitHub login that the model downloader can use** — pick one:
+   - **GitHub CLI (recommended):** install [`gh`](https://cli.github.com/) and run `gh auth login` once. `download_models.py` picks the login up automatically.
+   - **Or a token:** create a token with read access to the repo (GitHub → Settings → Developer settings → Personal access tokens) and export it before running setup — Mac/Linux: `export GITHUB_TOKEN=<token>`; Windows cmd: `set GITHUB_TOKEN=<token>`.
+   - **Or download by hand:** from the repo's Releases page (`model-v2`), download `title_block_detector_v2.pth` into `output/`, and unzip `field_classifier_v2.zip` into `output/` (it contains a `field_classifier_v2/` folder). Setup will report a failed download; that is fine.
+4. **The drawing datasets** in `data/` (not in git — copy them from the team's shared copy). See [Data layout](#quick-start-one-command-end-to-end).
+5. **Internet once** — for setup (packages + models) and for the first pipeline run (docTR downloads its OCR weights). After that everything runs offline.
+
+Without step 3, the model download fails with HTTP 404 (GitHub reports a private repo's files as "not found" when you are not logged in).
 
 ### Setup
 
@@ -27,7 +37,7 @@ python setup.py
 1. Checks your Python version
 2. Creates a virtual environment (`venv/`)
 3. Installs all dependencies from `requirements.txt`
-4. Downloads the trained models from the GitHub Release into `output/` (see [Models](#models))
+4. Downloads the trained models from the GitHub Release into `output/` (see [Models](#models)). If only this step fails, the environment is still fine — fix the login (step 3 above) and re-run `python download_models.py`.
 
 This works on both **Mac/Linux** and **Windows** — no need to run separate scripts.
 
@@ -47,7 +57,18 @@ venv\Scripts\activate
 
 ### Quick start: one command, end to end
 
-`run_pipeline.py` chains the whole pipeline together (detect + crop title blocks, then OCR + classify fields into a CSV) into a single command. This supersedes the earlier `run_ocr_pipeline.py`, which was an explicitly-labelled rule-based stopgap (keyword matching + position heuristics) used before the LayoutLMv3 field classifier existed — that script has since been removed from the repo (see git history if you need to refer back to it). See [Known differences from `run_ocr_pipeline.py`](#known-differences-from-run_ocr_pipelinepy) below for the coverage it had that the current pipeline doesn't yet match.
+`run_pipeline.py` chains the whole pipeline together (detect + crop title blocks, then OCR + classify fields into a CSV) into a single command. Run it from the project root with the virtual environment activated.
+
+**Data layout it expects.** Each dataset lives under `data/` (not in git — copy your own):
+
+```
+data/YFA_cabana/
+├── metadata.csv          # must have a "Node ID" column
+├── 455992/               # one folder per Node ID, containing the .jpg drawings
+└── ...
+```
+
+Datasets available to the team: `YFA_cabana`, `YFA_state_government`, `Bates_smart_Mccutcheon` (Bates is not supported by the detector yet — see Current Status).
 
 ```bash
 # Dataset mode: process one of the team's existing datasets (has a metadata.csv).
@@ -59,14 +80,22 @@ python run_pipeline.py --dataset_name YFA_cabana --run_name demo --limit 10
 
 # Folder mode: process an arbitrary folder of raw drawings (e.g. one on
 # the Desktop). No metadata.csv required, but no Node ID traceability either.
-python run_pipeline.py --input_dir <"/Users/Desktop/SomeFolder"> --run_name <outputfile >
+python run_pipeline.py --input_dir "/path/to/SomeFolder" --run_name some_batch
+
+# No arguments: folder mode over data/YFA_cabana, data/YFA_cabana_test and
+# data/YFA_state_government (folders that don't exist are skipped with a warning)
+python run_pipeline.py
 ```
+
+`--dataset_name` and `--input_dir` are mutually exclusive. Runs on CPU, so the full YFA datasets take a while; use `--limit 10` for a first check. `--run_name` defaults to `v2`, so **give each run its own name** or it will overwrite the previous run's output.
 
 Each run produces, named after `--run_name`:
 - `data/titleblock_crops_<run_name>/` — the cropped title block images
 - `output/batch_crop_<run_name>_failed.txt` — images where no title block was confidently detected
 - `output/extracted_metadata_<run_name>.csv` — the main output (team's 8-column schema)
-- `output/extracted_metadata_<run_name>_confidence.csv` — per-field confidence, plus `source_image` and (in dataset mode) `node_id`
+- `output/extracted_metadata_<run_name>_confidence.csv` — per-field confidence, plus `source_image`, `node_id` (dataset mode only), `drawing_types_source` and `needs_manual_review`
+
+`drawing_types` (Elevation / Perspective / Plan / Section / Detail) is not predicted by the model: it is derived by keyword matching on the extracted `drawing_name`. If the title contains no keyword the cell is left blank and `needs_manual_review` is `True` in the confidence CSV. The main CSV has no source-image column; rows line up with the confidence CSV by row order.
 
 ### Running the two stages separately
 
@@ -82,11 +111,11 @@ python field_classification/export_fields_to_csv.py --image_dir data/<crop_outpu
 
 Both accept no arguments too, in which case they fall back to the original default datasets/folders used during development.
 
-### Known differences from `run_ocr_pipeline.py`
+### Known limitations
 
-`run_pipeline.py` is the intended long-term replacement (per `run_ocr_pipeline.py`'s own docstring), but two gaps remain before it's a full drop-in:
-- `drawing_name` is not currently output at all (the field classifier doesn't predict it yet — see Current Status above). `run_ocr_pipeline.py` attempted it via a fragile position-based heuristic, so this is a loss in that one field's coverage, not a regression in reliability.
-- `run_ocr_pipeline.py` used the OCR model directly on the *full, uncropped* drawing rather than a title-block crop — this pipeline always crops first via the detection model, which is the intended design but means any drawing the detector fails on (see Current Status) currently produces no row at all, rather than a low-quality attempt at one.
+- Any drawing where the detector finds no title block (score < 0.5) produces **no row** in the CSV; it is only listed in `output/batch_crop_<run_name>_failed.txt`.
+- Rows whose OCR finds no text are skipped as well.
+- OCR misreads handwritten/stylised characters, so extracted values can be wrong even when the field is classified correctly (see Current Status).
 
 ### Retraining on new annotated data
 
@@ -105,6 +134,7 @@ Training currently runs on CPU (MPS has a known numerical instability issue with
 | 1. Title block detection | Faster R-CNN (torchvision, fine-tuned) | Locate the title block region on each drawing |
 | 2. Text recognition (OCR) | docTR | Extract text and bounding boxes from the title block |
 | 3. Field classification | LayoutLMv3 (fine-tuned) | Classify extracted text into metadata fields |
+| 4. Drawing type | Keyword matching | Derive `drawing_types` from the extracted `drawing_name` |
 
 > Note: the original plan called for RT-DETR for detection. We switched to a fine-tuned Faster R-CNN (torchvision) for the current models — RT-DETR can still be revisited later if detection accuracy needs to improve further.
 
@@ -114,9 +144,9 @@ Everything the pipeline uses, and where each model comes from:
 
 | Stage | Model | File / source | Size | Distribution |
 |---|---|---|---|---|
-| Title block detection | Faster R-CNN ResNet-50 FPN, fine-tuned (v2) | `output/title_block_detector_v2.pth` | 158 MB | GitHub Release `models-v2` |
+| Title block detection | Faster R-CNN ResNet-50 FPN, fine-tuned (v2) | `output/title_block_detector_v2.pth` | 158 MB | GitHub Release `model-v2` |
 | OCR | docTR `ocr_predictor(pretrained=True)` (default detection + recognition models) | downloaded automatically on first run | — | docTR / internet, once |
-| Field classification | LayoutLMv3 token classifier, fine-tuned (v2) | `output/field_classifier_v2/` | 478 MB | GitHub Release `models-v2` |
+| Field classification | LayoutLMv3 token classifier, fine-tuned (v2) | `output/field_classifier_v2/` | 478 MB | GitHub Release `model-v2` |
 
 Older versions (`title_block_detector_v0/v1`, `field_classifier_v0/v1`) are kept locally by the model authors only, are superseded by v2, and are not distributed. `train_title_block_detector.py` also starts from torchvision's COCO-pretrained Faster R-CNN weights (training only; downloaded automatically).
 
@@ -127,9 +157,9 @@ python download_models.py            # downloads only what is missing
 python download_models.py --force    # re-download everything
 ```
 
-If the repository is private, set `GITHUB_TOKEN` (a token with read access to the repo) before running it. Internet access is needed once; the pipeline itself runs fully offline afterwards.
+The repository is private, so it needs a GitHub login: either `gh auth login` (GitHub CLI) or the `GITHUB_TOKEN` environment variable — see the [checklist](#what-you-need-to-do-checklist). Internet access is needed once; the pipeline itself runs fully offline afterwards.
 
-**Publishing a new model version** (maintainers): create a new Release (e.g. tag `models-v3`), upload the new `.pth` file and a zip of the field classifier folder (the zip must contain a top-level `field_classifier_vN/` folder), then update `RELEASE_TAG`, the `MODELS` names + `shasum -a 256` checksums in `download_models.py`, and the model paths in `run_pipeline.py`.
+**Publishing a new model version** (maintainers): create a new Release (e.g. tag `model-v3`), upload the new `.pth` file and a zip of the field classifier folder (the zip must contain a top-level `field_classifier_vN/` folder), then update `RELEASE_TAG`, the `MODELS` names + `shasum -a 256` checksums in `download_models.py`, and the model paths in `run_pipeline.py`.
 
 ## Current Status
 
@@ -145,9 +175,11 @@ If the repository is private, set `GITHUB_TOKEN` (a token with read access to th
 - Retrained on a larger batch of 84 annotated crops (up from the original 5-image proof of concept), using a stratified train/val split by source dataset (17 held out for validation) and early stopping on validation loss — training past ~epoch 3 overfits noticeably (train loss keeps falling while val loss gets worse), so the checkpoint with the lowest validation loss is saved automatically rather than just the final epoch.
 - On the held-out validation split (17 images the model never trained on), per-field recall: `architect` 100%, `date` 96%, `project_name` 91%, `scale` 70%, `drawing_number` 64%, `draughtsperson` 62%. This is a large improvement over the 5-image model, which essentially failed to generalize to any unseen image at all.
 - Some of the weaker fields' apparent error rate is inflated by a handful of specific images with incomplete annotation (e.g. one image had only 4 of ~20 expected fields labelled) rather than genuine model failure — worth a spot-check/re-annotation pass on the sparsely-labelled images before drawing firm conclusions about `scale`/`drawing_number`/`draughtsperson` specifically.
-- `drawing_name` and `drawing_types` are excluded from the current model. In annotation, these two fields were often labelled on the same span of text, which conflicts with LayoutLMv3's one-label-per-word setup — needs a team decision on how the two fields should be defined/scoped before re-including them.
+- `drawing_name` is included in v2 (held-out recall 88%). `drawing_types` is not predicted by the model: it conflicted with `drawing_name` (often labelled on the same span, while LayoutLMv3 allows one label per word), so it is derived from `drawing_name` by keyword matching instead (see Drawing types below).
 - Classification is fairly robust to OCR misreadings (a word can still be routed to the right field even if its text is garbled), but the *value* written to the CSV is only as accurate as the OCR output — this is a separate, still-open problem (see below).
 - Fields with highly variable values (`date`, `draughtsperson`) still generalize somewhat worse than fields with consistent boilerplate text (`architect`, `project_name`) — more annotated examples with varied dates/names should help further.
+
+**Drawing types** — only the keyword approach is in the pipeline. Visual classifiers were tried and rejected: CLIP discriminated poorly on these hand-drafted drawings, and the TU Darmstadt DrawingClassifiers CNN reached only ~35% accuracy (and covers just 3 of the 5 categories), so drawings whose titles state no type are flagged for manual review instead. The scripts are in `drawing_type_classification/`.
 
 **OCR** — known issue: handwritten or stylised characters are sometimes misread (e.g. a fraction like `1/4` read as `V4`). This doesn't reliably break field classification (the word still gets routed to the right field based on position/context) but does corrupt the actual extracted value. Not yet addressed — options under consideration: surfacing per-word OCR confidence in the output for manual review, or field-specific validation rules.
 
@@ -179,6 +211,7 @@ It provides one image record at a time (including `node_id`), so the Core does n
 ├── run_pipeline.py       # End-to-end entry point (detect + crop + OCR + classify -> CSV)
 ├── detection/            # Title block detection: training, merging annotations, inference, visualisation
 ├── field_classification/ # Field classification: OCR extraction, annotation prep, training, CSV export
+├── drawing_type_classification/ # drawing_types keyword matching + rejected visual-classifier experiments
 ├── testing/              # End-to-end and misc test scripts
 ├── src/                  # Shared input/output module (iter_images, save_output)
 ├── data/                 # Drawing dataset and annotations (not tracked in git)

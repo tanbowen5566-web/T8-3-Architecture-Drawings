@@ -50,7 +50,7 @@ Usage:
 
     # Folder mode -- arbitrary folder, no metadata.csv required.
     # Traceability is by filename only (no Node ID available).
-    python run_pipeline.py --input_dir "/Users/dazai/Desktop/SomeFolder" --run_name some_batch
+    python run_pipeline.py --input_dir "/path/to/SomeFolder" --run_name some_batch
 
     # Multiple input folders at once are also supported in folder mode
     python run_pipeline.py --input_dir folder1 folder2 --run_name some_batch

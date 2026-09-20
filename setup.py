@@ -143,7 +143,7 @@ def download_models():
         print_error(
             "Model download failed. The environment is otherwise ready; retry later with:\n"
             "    python download_models.py\n"
-            "If the repository is private, set the GITHUB_TOKEN environment variable first."
+            "The repository is private: run `gh auth login` (GitHub CLI) or set the GITHUB_TOKEN environment variable first."
         )
 
 
