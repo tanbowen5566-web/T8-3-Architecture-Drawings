@@ -3,6 +3,19 @@ import pandas as pd
 
 DATA_DIR = Path("data")
 
+# The team's required output schema (default columns for save_output)
+OUTPUT_COLUMNS = [
+    "project_name",
+    "drawing_name",
+    "architect",
+    "draughtsperson",
+    "drawing_number",
+    "date",
+    "scale",
+    "drawing_types",
+]
+
+
 # Define input function
 def load_dataset(dataset_name):
     dataset_path = DATA_DIR / dataset_name
@@ -19,13 +32,13 @@ def load_dataset(dataset_name):
         raise FileNotFoundError(
             f"Metadata file not found: {metadata_path}"
         )
-    
+
     # Read metadata.csv
     metadata = pd.read_csv(metadata_path)
 
     # Check whether the Node ID column exists
     if "Node ID" not in metadata.columns:
-         raise ValueError(
+        raise ValueError(
             "Node ID column is missing from metadata.csv"
         )
 
@@ -45,10 +58,12 @@ def load_dataset(dataset_name):
 
             continue
 
-        # Store JPG files found in this Node ID folder
+        # Store JPG files found in this Node ID folder.
+        # sorted(): iterdir() order depends on the OS / file system, so without
+        # it "--limit 10" could pick different images on different machines.
         jpg_files = []
 
-        for file in node_folder.iterdir():
+        for file in sorted(node_folder.iterdir()):
             if file.is_file() and file.suffix.lower() == ".jpg":
                 jpg_files.append(file)
 
@@ -74,6 +89,7 @@ def load_dataset(dataset_name):
 
     return records
 
+
 # Provide one image record at a time to Core
 def iter_images(dataset_name):
     records = load_dataset(dataset_name)
@@ -82,9 +98,59 @@ def iter_images(dataset_name):
         yield record
 
 
+# Define output function
+def save_output(results, output_path, columns=None):
+    """Save a list of result dicts to CSV.
 
-# test input function
+    columns: column names in output order. Defaults to the team's 8-column
+             schema (OUTPUT_COLUMNS), so existing callers behave exactly as
+             before. Pass a longer list (e.g. source_image, node_id, each field
+             + its confidence) to keep extra columns.
+    """
+    # Check whether there are results to save
+    if not results:
+        print("Warning: no output results to save")
+        return
+
+    if columns is None:
+        columns = OUTPUT_COLUMNS
+
+    # Convert the core results into a table
+    output_df = pd.DataFrame(results)
+
+    # Add missing columns as empty values
+    for column in columns:
+        if column not in output_df.columns:
+            output_df[column] = ""
+
+    # Convert multiple drawing types into one string for CSV
+    if "drawing_types" in output_df.columns:
+        output_df["drawing_types"] = output_df["drawing_types"].apply(
+            lambda x: "; ".join(x) if isinstance(x, list) else x
+        )
+
+    # Keep the columns in the required order
+    output_df = output_df[columns]
+
+    # Convert output_path into a Path object
+    output_path = Path(output_path)
+
+    # Create the output folder if it does not exist
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Save the results to a CSV file
+    output_df.to_csv(output_path, index=False)
+
+    print(f"Output saved to: {output_path}")
+
+
+# ---------------------------------------------------------------------------
+# Manual tests: only run with `python -m src.input_output`, NOT on import.
+# (Previously the output test ran at import time and overwrote
+# output/extracted_metadata.csv every time run_pipeline.py was started.)
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    # test input function
     datasets = [
         "Bates_smart_Mccutcheon",
         "YFA_cabana",
@@ -160,71 +226,22 @@ if __name__ == "__main__":
         if count == 3:
             break
 
-
-# Define output function
-def save_output(results, output_path):
-    # Check whether there are results to save
-    if not results:
-        print("Warning: no output results to save")
-        return
-
-    # Convert the core results into a table
-    output_df = pd.DataFrame(results)
-
-    # Define the required output columns
-    output_columns = [
-        "project_name",
-        "drawing_name",
-        "architect",
-        "draughtsperson",
-        "drawing_number",
-        "date",
-        "scale",
-        "drawing_types"
+    # Test output function (writes to a test path, not the real output file)
+    test_results = [
+        {
+            "project_name": "Test Project",
+            "drawing_name": "Site Plan",
+            "architect": "Test Architect",
+            "draughtsperson": "Test Person",
+            "drawing_number": "001",
+            "date": "1984",
+            "scale": "1:100",
+            "drawing_types": [
+                "Front View",
+                "Left View",
+                "Right View"
+            ]
+        }
     ]
 
-    # Add missing columns as empty values
-    for column in output_columns:
-        if column not in output_df.columns:
-            output_df[column] = ""
-    
-    # Convert multiple drawing types into one string for CSV
-    if "drawing_types" in output_df.columns:
-        output_df["drawing_types"] = output_df["drawing_types"].apply(
-            lambda x: "; ".join(x) if isinstance(x, list) else x
-        )
-
-    # Keep the columns in the required order
-    output_df = output_df[output_columns]
-
-    # Convert output_path into a Path object
-    output_path = Path(output_path)
-
-    # Create the output folder if it does not exist
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Save the results to a CSV file
-    output_df.to_csv(output_path, index=False)
-
-    print(f"Output saved to: {output_path}")
-
-
-#Test output function
-test_results = [
-    {
-        "project_name": "Test Project",
-        "drawing_name": "Site Plan",
-        "architect": "Test Architect",
-        "draughtsperson": "Test Person",
-        "drawing_number": "001",
-        "date": "1984",
-        "scale": "1:100",
-        "drawing_types": [
-            "Front View",
-            "Left View",
-            "Right View"
-        ]
-    }
-]
-
-save_output(test_results, "output/extracted_metadata.csv")
+    save_output(test_results, "output/test_extracted_metadata.csv")
