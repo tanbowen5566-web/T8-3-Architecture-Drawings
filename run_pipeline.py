@@ -50,6 +50,12 @@ Stage 2 now iterates over this run's routing result instead of listing the
 crop folder, so stale crops from an earlier run with the same run_name are
 no longer picked up. Use --no_tb skip to restore the old behaviour.
 
+2026-09-27 update: the default No-TB method is now the rule/layout-based
+extractor (--no_tb_method rules, src/no_tb/rules.py): preprocessing, tiled
+docTR, ink colour, text blocks, block roles (title / view_title / scale /
+drawing_no / stamp / contract_note / archive_mark ...), then fields. The
+LayoutLMv3 full-sheet baseline is still available with --no_tb_method layoutlm.
+
 Usage:
     # Dataset mode -- uses the team's iter_images(dataset_name), which
     # reads data/<dataset_name>/metadata.csv and each Node ID's folder.
@@ -71,7 +77,9 @@ Usage:
 
     # No-TB branch options
     python run_pipeline.py --input_dir folder --run_name x --no_tb skip          # old behaviour
-    python run_pipeline.py --input_dir folder --run_name x --no_tb_ocr tiled --no_tb_upscale 2
+    python run_pipeline.py --input_dir folder --run_name x --no_tb_debug                  # rules + overlays
+    python run_pipeline.py --input_dir folder --run_name x --no_tb_method layoutlm       # old baseline
+    python run_pipeline.py --input_dir folder --run_name x --no_tb_method layoutlm --no_tb_ocr tiled --no_tb_upscale 2
 
 2026-09-27 update: single output file. Values and confidences are now written
 to ONE csv instead of the old main csv + *_confidence.csv pair:
@@ -215,8 +223,16 @@ def parse_args():
         help="What to do with drawings where no title block is detected: 'tb_recipe' = run the TB field classifier on the full sheet (src/no_tb), 'skip' = old behaviour (logged only)",
     )
     parser.add_argument(
+        "--no_tb_method", choices=["rules", "layoutlm"], default="rules",
+        help="No-TB extractor: 'rules' = rule/layout-based extractor (src/no_tb/rules.py, default), 'layoutlm' = baseline, the TB field classifier on the full sheet (src/no_tb/baseline.py)",
+    )
+    parser.add_argument(
+        "--no_tb_target_long", type=int, default=4096,
+        help="No-TB rules only: long side (px) the sheet is resized to before tiled OCR. Lower (e.g. 3072) = faster, may miss small lettering",
+    )
+    parser.add_argument(
         "--no_tb_ocr", choices=["full", "tiled"], default="full",
-        help="No-TB OCR mode: 'full' = one docTR pass on the whole sheet (same as TB branch), 'tiled' = 1024px overlapping tiles so small lettering is not downscaled away",
+        help="No-TB layoutlm baseline only. OCR mode: 'full' = one docTR pass on the whole sheet (same as TB branch), 'tiled' = 1024px overlapping tiles so small lettering is not downscaled away",
     )
     parser.add_argument(
         "--no_tb_debug", action="store_true",
@@ -224,7 +240,7 @@ def parse_args():
     )
     parser.add_argument(
         "--no_tb_upscale", type=float, default=1.0,
-        help="No-TB only: resize factor applied to the sheet before OCR (e.g. 2 for 2048px-wide scans)",
+        help="No-TB layoutlm baseline only: resize factor applied to the sheet before OCR (e.g. 2 for 2048px-wide scans)",
     )
     args = parser.parse_args()
     if args.dataset_name is None and args.input_dir is None:
@@ -485,14 +501,14 @@ def classify_fields_to_csv(routes, output_csv_path, node_id_by_filename, args):
         else:
             fields, info = process_no_tb(
                 route["image_path"], ocr_model, processor, field_model, MODEL_FIELDS,
+                method=args.no_tb_method, target_long=args.no_tb_target_long,
                 ocr_mode=args.no_tb_ocr, upscale=args.no_tb_upscale,
                 debug_dir=f"output/no_tb_debug_{args.run_name}" if args.no_tb_debug else None,
             )
             if fields is None:
                 print("  OCR found no text, skipping")
                 continue
-            print(f"  No-TB: {info['n_words']} words, {info['n_labelled_words']} labelled, "
-                  f"{info['n_windows']} window(s), {info['n_spans']} span(s)")
+            print(f"  No-TB [{args.no_tb_method}]: " + ", ".join(f"{k}={v}" for k, v in info.items()))
 
         # drawing_types: keyword match against the drawing_name text this
         # model just extracted. A match is a deterministic text lookup, not
@@ -514,8 +530,8 @@ def classify_fields_to_csv(routes, output_csv_path, node_id_by_filename, args):
             drawing_types_source = "unmatched"
             needs_manual_review = True
 
-        # No-TB output comes from a classifier trained on title block crops
-        # only (baseline) -- always send it to review until it's validated.
+        # No-TB output (rules or layoutlm baseline) is not validated against
+        # ground truth yet -- always send it to review until it is.
         if branch == "no_tb":
             needs_manual_review = True
 
