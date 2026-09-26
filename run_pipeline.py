@@ -39,6 +39,23 @@ drawing_types needs to stay excluded now). On the held-out validation
 split, v2 gets 88% recall on drawing_name, and every other field's
 recall also improved over v1 (e.g. scale 70% -> 90%).
 
+2026-09-26 update: No-TB routing. Drawings where the detector finds no
+high-confidence title block (score < DETECTION_SCORE_THRESHOLD) used to be
+skipped entirely (only logged in *_failed.txt). They now go through the
+No-TB branch (src/no_tb/branch.py): full image -> docTR -> the same
+field_classifier_v2, with a sliding window over tokens and one spatial span
+per field. This is a BASELINE -- the classifier was trained on title block
+crops only -- so every No-TB row is marked needs_manual_review = True.
+Stage 2 now iterates over this run's routing result instead of listing the
+crop folder, so stale crops from an earlier run with the same run_name are
+no longer picked up. Use --no_tb skip to restore the old behaviour.
+
+2026-09-27 update: the default No-TB method is now the rule/layout-based
+extractor (--no_tb_method rules, src/no_tb/rules.py): preprocessing, tiled
+docTR, ink colour, text blocks, block roles (title / view_title / scale /
+drawing_no / stamp / contract_note / archive_mark ...), then fields. The
+LayoutLMv3 full-sheet baseline is still available with --no_tb_method layoutlm.
+
 Usage:
     # Dataset mode -- uses the team's iter_images(dataset_name), which
     # reads data/<dataset_name>/metadata.csv and each Node ID's folder.
@@ -58,14 +75,27 @@ Usage:
     # Run with no arguments to use the default datasets and run name (folder mode)
     python run_pipeline.py
 
+    # No-TB branch options
+    python run_pipeline.py --input_dir folder --run_name x --no_tb skip          # old behaviour
+    python run_pipeline.py --input_dir folder --run_name x --no_tb_debug                  # rules + overlays
+    python run_pipeline.py --input_dir folder --run_name x --no_tb_method layoutlm       # old baseline
+    python run_pipeline.py --input_dir folder --run_name x --no_tb_method layoutlm --no_tb_ocr tiled --no_tb_upscale 2
+
+2026-09-27 update: single output file. Values and confidences are now written
+to ONE csv instead of the old main csv + *_confidence.csv pair:
+    source_image, node_id, <field>, <field>_confidence, ... (OUTPUT_FIELDS order),
+    then run info (EXTRA_COLUMNS: branch, tb_score, drawing_types_source,
+    needs_manual_review). Written with save_output(..., columns=...), which
+    defaults to the 8-column schema for other callers.
+
 This creates:
     data/titleblock_crops_<run_name>/            cropped title block images
-    output/batch_crop_<run_name>_failed.txt       images where detection failed
-    output/extracted_metadata_<run_name>.csv      main output (team's 8-column schema)
-    output/extracted_metadata_<run_name>_confidence.csv   per-field confidence + Node ID
-                                                   + drawing_types_source + needs_manual_review
-                                                   (Node ID column is only populated in
-                                                   dataset mode; blank in folder mode)
+    output/batch_crop_<run_name>_failed.txt       images without a detected title block
+    output/extracted_metadata_<run_name>.csv      THE output: source_image, node_id, then each
+                                                   field followed by its confidence
+                                                   (node_id is only populated in dataset
+                                                   mode; blank in folder mode)
+    output/routing_<run_name>.csv                 per image: branch, detector score, crop path
 """
 
 import argparse
@@ -81,6 +111,7 @@ from doctr.models import ocr_predictor
 from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 
 from src.input_output import save_output, iter_images
+from src.no_tb import process_no_tb
 
 DETECTOR_MODEL_PATH = "output/title_block_detector_v2.pth"
 FIELD_MODEL_DIR = "output/field_classifier_v2"
@@ -107,6 +138,35 @@ MODEL_FIELDS = [
     "drawing_number",
     "drawing_name",
 ]
+
+# Output column order: source_image, node_id, then each field immediately
+# followed by its confidence, then EXTRA_COLUMNS. Order of the fields
+# follows the team's 8-column schema.
+OUTPUT_FIELDS = [
+    "project_name",
+    "drawing_name",
+    "architect",
+    "draughtsperson",
+    "drawing_number",
+    "date",
+    "scale",
+    "drawing_types",
+]
+# Run info appended after the field columns. Set to [] for a pure
+# source_image + node_id + fields/confidences file.
+EXTRA_COLUMNS = ["branch", "tb_score", "drawing_types_source", "needs_manual_review"]
+
+
+def output_fieldnames():
+    cols = ["source_image", "node_id"]
+    for f in OUTPUT_FIELDS:
+        cols += [f, f"{f}_confidence"]
+    return cols + EXTRA_COLUMNS
+
+
+def fmt_conf(conf):
+    return f"{conf:.3f}" if conf is not None else ""
+
 
 # Client's fixed drawing_types vocabulary. Order matters: a title can
 # contain more than one keyword (e.g. "ELEVATIONS - SECTION STRUCTURAL
@@ -157,6 +217,30 @@ def parse_args():
     parser.add_argument(
         "--limit", type=int, default=None,
         help="Only process the first N images (useful for a quick demo run instead of the full dataset)",
+    )
+    parser.add_argument(
+        "--no_tb", choices=["tb_recipe", "skip"], default="tb_recipe",
+        help="What to do with drawings where no title block is detected: 'tb_recipe' = run the TB field classifier on the full sheet (src/no_tb), 'skip' = old behaviour (logged only)",
+    )
+    parser.add_argument(
+        "--no_tb_method", choices=["rules", "layoutlm"], default="rules",
+        help="No-TB extractor: 'rules' = rule/layout-based extractor (src/no_tb/rules.py, default), 'layoutlm' = baseline, the TB field classifier on the full sheet (src/no_tb/baseline.py)",
+    )
+    parser.add_argument(
+        "--no_tb_target_long", type=int, default=4096,
+        help="No-TB rules only: long side (px) the sheet is resized to before tiled OCR. Lower (e.g. 3072) = faster, may miss small lettering",
+    )
+    parser.add_argument(
+        "--no_tb_ocr", choices=["full", "tiled"], default="full",
+        help="No-TB layoutlm baseline only. OCR mode: 'full' = one docTR pass on the whole sheet (same as TB branch), 'tiled' = 1024px overlapping tiles so small lettering is not downscaled away",
+    )
+    parser.add_argument(
+        "--no_tb_debug", action="store_true",
+        help="No-TB only: dump every OCR word + predicted label (json) and an overlay image to output/no_tb_debug_<run_name>/",
+    )
+    parser.add_argument(
+        "--no_tb_upscale", type=float, default=1.0,
+        help="No-TB layoutlm baseline only: resize factor applied to the sheet before OCR (e.g. 2 for 2048px-wide scans)",
     )
     args = parser.parse_args()
     if args.dataset_name is None and args.input_dir is None:
@@ -219,7 +303,10 @@ def build_detector(num_classes):
     return model
 
 
-def detect_and_crop_all(images, crop_output_dir, failed_log_path, device):
+def detect_and_crop_all(images, crop_output_dir, failed_log_path, routing_csv_path, device):
+    """Detect + crop, and route every image to a branch.
+    Returns a list (same order as images) of
+      {"fname", "image_path", "branch": "tb" | "no_tb", "tb_score", "crop_path"}"""
     print("Loading title block detection model (v2)...")
     detector = build_detector(DETECTOR_NUM_CLASSES)
     detector.load_state_dict(torch.load(DETECTOR_MODEL_PATH, map_location=device))
@@ -233,6 +320,7 @@ def detect_and_crop_all(images, crop_output_dir, failed_log_path, device):
 
     success_count = 0
     failed_images = []
+    routes = []
 
     for i, (fname, img_path) in enumerate(images, 1):
         image = Image.open(img_path).convert("RGB")
@@ -244,9 +332,12 @@ def detect_and_crop_all(images, crop_output_dir, failed_log_path, device):
         boxes = prediction["boxes"]
         scores = prediction["scores"]
 
-        if len(scores) == 0 or scores.max() < DETECTION_SCORE_THRESHOLD:
-            print(f"[{i}/{len(images)}] Skipped (no high-confidence title block detected): {fname}")
+        max_score = scores.max().item() if len(scores) else 0.0
+        if len(scores) == 0 or max_score < DETECTION_SCORE_THRESHOLD:
+            print(f"[{i}/{len(images)}] No title block (best score={max_score:.3f}) -> No-TB branch: {fname}")
             failed_images.append(fname)
+            routes.append({"fname": fname, "image_path": img_path, "branch": "no_tb",
+                           "tb_score": max_score, "crop_path": ""})
             continue
 
         best_idx = scores.argmax()
@@ -264,14 +355,24 @@ def detect_and_crop_all(images, crop_output_dir, failed_log_path, device):
 
         print(f"[{i}/{len(images)}] Success (confidence={score:.3f}): {fname}")
         success_count += 1
+        routes.append({"fname": fname, "image_path": img_path, "branch": "tb",
+                       "tb_score": score, "crop_path": out_path})
 
     with open(failed_log_path, "w", encoding="utf-8") as f:
         for fname in failed_images:
             f.write(fname + "\n")
 
-    print(f"\nDetection done: {success_count} succeeded, {len(failed_images)} failed/skipped")
+    with open(routing_csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["fname", "image_path", "branch", "tb_score", "crop_path"])
+        writer.writeheader()
+        for r in routes:
+            writer.writerow({**r, "tb_score": f"{r['tb_score']:.3f}"})
+
+    print(f"\nDetection done: {success_count} with title block, {len(failed_images)} without (-> No-TB branch)")
     print(f"Crops saved to: {crop_output_dir}")
-    print(f"Failed list saved to: {failed_log_path}\n")
+    print(f"No-TB list saved to: {failed_log_path}")
+    print(f"Routing saved to: {routing_csv_path}\n")
+    return routes
 
 
 # ---------------------------------------------------------------------------
@@ -357,7 +458,7 @@ def predict_fields(image, words_data, processor, field_model):
     return result
 
 
-def classify_fields_to_csv(crop_dir, output_csv_path, confidence_csv_path, node_id_by_filename):
+def classify_fields_to_csv(routes, output_csv_path, node_id_by_filename, args):
     print("Loading OCR model...")
     ocr_model = ocr_predictor(pretrained=True)
 
@@ -368,36 +469,46 @@ def classify_fields_to_csv(crop_dir, output_csv_path, confidence_csv_path, node_
 
     os.makedirs(os.path.dirname(output_csv_path) or ".", exist_ok=True)
 
-    image_files = sorted(
-        f for f in os.listdir(crop_dir)
-        if f.lower().endswith((".jpg", ".jpeg", ".png"))
-    )
+    if args.no_tb == "skip":
+        skipped = [r for r in routes if r["branch"] == "no_tb"]
+        routes = [r for r in routes if r["branch"] == "tb"]
+        if skipped:
+            print(f"--no_tb skip: {len(skipped)} No-TB image(s) not processed")
 
-    if not image_files:
-        print(f"Warning: no images found in {crop_dir} -- nothing to classify")
+    if not routes:
+        print("Warning: no images to classify")
         return
 
-    print(f"{len(image_files)} images to process\n")
+    n_tb = sum(r["branch"] == "tb" for r in routes)
+    print(f"{len(routes)} images to process ({n_tb} TB, {len(routes) - n_tb} No-TB)\n")
 
-    main_results = []
-    confidence_rows = []
+    rows = []
+    n_no_tb = 0
 
-    for fname in image_files:
-        print(f"Processing: {fname}")
-        image_path = os.path.join(crop_dir, fname)
-        image = Image.open(image_path).convert("RGB")
+    for route in routes:
+        fname = route["fname"]
+        branch = route["branch"]
+        print(f"Processing [{branch}]: {fname}")
 
-        words_data = extract_words_with_boxes(image_path, ocr_model)
-        if not words_data:
-            print("  OCR found no text, skipping")
-            continue
-
-        fields = predict_fields(image, words_data, processor, field_model)
-
-        # save_output() strictly filters to the team's 8-column schema, so
-        # source_image / Node ID can't live in the main CSV -- they go in
-        # the confidence CSV instead, which we fully control.
-        main_row = {field: fields[field]["value"] for field in MODEL_FIELDS}
+        if branch == "tb":
+            image_path = route["crop_path"]
+            image = Image.open(image_path).convert("RGB")
+            words_data = extract_words_with_boxes(image_path, ocr_model)
+            if not words_data:
+                print("  OCR found no text, skipping")
+                continue
+            fields = predict_fields(image, words_data, processor, field_model)
+        else:
+            fields, info = process_no_tb(
+                route["image_path"], ocr_model, processor, field_model, MODEL_FIELDS,
+                method=args.no_tb_method, target_long=args.no_tb_target_long,
+                ocr_mode=args.no_tb_ocr, upscale=args.no_tb_upscale,
+                debug_dir=f"output/no_tb_debug_{args.run_name}" if args.no_tb_debug else None,
+            )
+            if fields is None:
+                print("  OCR found no text, skipping")
+                continue
+            print(f"  No-TB [{args.no_tb_method}]: " + ", ".join(f"{k}={v}" for k, v in info.items()))
 
         # drawing_types: keyword match against the drawing_name text this
         # model just extracted. A match is a deterministic text lookup, not
@@ -409,49 +520,47 @@ def classify_fields_to_csv(crop_dir, output_csv_path, confidence_csv_path, node_
         drawing_name_text = fields["drawing_name"]["value"]
         drawing_types_label = classify_drawing_type_from_text(drawing_name_text)
         if drawing_types_label is not None:
-            main_row["drawing_types"] = drawing_types_label
+            drawing_types_value = drawing_types_label
             drawing_types_confidence = 1.0
             drawing_types_source = "keyword"
             needs_manual_review = False
         else:
-            main_row["drawing_types"] = ""
+            drawing_types_value = ""
             drawing_types_confidence = None
             drawing_types_source = "unmatched"
             needs_manual_review = True
 
-        main_results.append(main_row)
+        # No-TB output (rules or layoutlm baseline) is not validated against
+        # ground truth yet -- always send it to review until it is.
+        if branch == "no_tb":
+            needs_manual_review = True
 
-        confidence_row = {
-            "source_image": fname,
-            "node_id": node_id_by_filename.get(fname, ""),
+        values = {f: fields[f]["value"] for f in MODEL_FIELDS}
+        confs = {f: fields[f]["confidence"] for f in MODEL_FIELDS}
+        values["drawing_types"] = drawing_types_value
+        confs["drawing_types"] = drawing_types_confidence
+
+        row = {"source_image": fname, "node_id": node_id_by_filename.get(fname, "")}
+        for f in OUTPUT_FIELDS:
+            row[f] = values.get(f, "")
+            row[f"{f}_confidence"] = fmt_conf(confs.get(f))
+        extra = {
+            "branch": branch,
+            "tb_score": f"{route['tb_score']:.3f}",
+            "drawing_types_source": drawing_types_source,
+            "needs_manual_review": needs_manual_review,
         }
-        for field in MODEL_FIELDS:
-            conf = fields[field]["confidence"]
-            confidence_row[f"{field}_confidence"] = f"{conf:.3f}" if conf is not None else ""
-        confidence_row["drawing_types_confidence"] = (
-            f"{drawing_types_confidence:.3f}" if drawing_types_confidence is not None else ""
-        )
-        confidence_row["drawing_types_source"] = drawing_types_source
-        confidence_row["needs_manual_review"] = needs_manual_review
-        confidence_rows.append(confidence_row)
+        for c in EXTRA_COLUMNS:
+            row[c] = extra[c]
+        rows.append(row)
+        n_no_tb += branch == "no_tb"
 
         print("  Done")
 
-    save_output(main_results, output_csv_path)
+    save_output(rows, output_csv_path, columns=output_fieldnames())
 
-    confidence_fieldnames = (
-        ["source_image", "node_id"]
-        + [f"{f}_confidence" for f in MODEL_FIELDS]
-        + ["drawing_types_confidence", "drawing_types_source", "needs_manual_review"]
-    )
-    with open(confidence_csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=confidence_fieldnames)
-        writer.writeheader()
-        writer.writerows(confidence_rows)
-
-    print(f"\nField classification done: {len(main_results)} images processed")
-    print(f"Main output (team's schema): {output_csv_path}")
-    print(f"Confidence + Node ID output: {confidence_csv_path}")
+    print(f"\nField classification done: {len(rows)} images processed "
+          f"({len(rows) - n_no_tb} TB, {n_no_tb} No-TB)")
     if not node_id_by_filename:
         print("Note: running in folder mode -- 'node_id' column is blank. Use --dataset_name for Node ID traceability.")
 
@@ -467,7 +576,7 @@ def main():
     crop_output_dir = f"data/titleblock_crops_{args.run_name}"
     failed_log_path = f"output/batch_crop_{args.run_name}_failed.txt"
     output_csv_path = f"output/extracted_metadata_{args.run_name}.csv"
-    confidence_csv_path = f"output/extracted_metadata_{args.run_name}_confidence.csv"
+    routing_csv_path = f"output/routing_{args.run_name}.csv"
 
     images, node_id_by_filename = get_images_and_node_ids(args)
 
@@ -475,11 +584,11 @@ def main():
         images = images[:args.limit]
         print(f"--limit {args.limit} applied: processing {len(images)} image(s)\n")
 
-    print("===== Stage 1: title block detection + crop =====\n")
-    detect_and_crop_all(images, crop_output_dir, failed_log_path, device)
+    print("===== Stage 1: title block detection + crop + routing =====\n")
+    routes = detect_and_crop_all(images, crop_output_dir, failed_log_path, routing_csv_path, device)
 
-    print("===== Stage 2: OCR + field classification =====\n")
-    classify_fields_to_csv(crop_output_dir, output_csv_path, confidence_csv_path, node_id_by_filename)
+    print("===== Stage 2: OCR + field classification (TB crop / No-TB full sheet) =====\n")
+    classify_fields_to_csv(routes, output_csv_path, node_id_by_filename, args)
 
 
 if __name__ == "__main__":
