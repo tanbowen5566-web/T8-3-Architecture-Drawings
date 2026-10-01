@@ -18,7 +18,7 @@ Usage:
     python export_fields_to_csv.py
 
     # Point at any crop folder and output filenames
-    python export_fields_to_csv.py --image_dir data/titleblock_crops_folderA --output_csv output/extracted_metadata_folderA.csv
+    python export_fields_to_csv.py --image_dir data/titleblock_crops_folderA --output_csv results/extracted_metadata_folderA.csv
 
 Dependencies:
     pip install python-doctr[torch] transformers torch pillow pandas
@@ -36,11 +36,11 @@ from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 
 from src.input_output import save_output
 
-FIELD_MODEL_DIR = "output/field_classifier_v2"  # same model as run_pipeline.py
+FIELD_MODEL_DIR = "models/field_classifier_v2"  # same model as run_pipeline.py
 
 DEFAULT_IMAGE_DIR = "data/titleblock_crops_auto"
-DEFAULT_OUTPUT_CSV_PATH = "output/extracted_metadata.csv"
-DEFAULT_CONFIDENCE_CSV_PATH = "output/extracted_metadata_confidence.csv"
+DEFAULT_OUTPUT_CSV_PATH = "results/extracted_metadata.csv"
+DEFAULT_CONFIDENCE_CSV_PATH = "results/extracted_metadata_confidence.csv"
 
 # Fields the current model predicts (drawing_name / drawing_types are not
 # yet part of training -- see the notes in

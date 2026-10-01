@@ -6,6 +6,7 @@ Purpose: End-to-end entry point that chains together the two stages of
            1. Title block detection + crop (Faster R-CNN, v2 model)
            2. OCR + field classification -> structured CSV (docTR + LayoutLMv3)
 
+
 2026-09-14 update: field classification now uses field_classifier_v1
 (84-image training set, early-stopped at the best validation-loss
 checkpoint) instead of field_classifier_v0 (5-image proof of concept).
@@ -88,14 +89,21 @@ to ONE csv instead of the old main csv + *_confidence.csv pair:
     needs_manual_review). Written with save_output(..., columns=...), which
     defaults to the 8-column schema for other callers.
 
+Folder layout:
+    models/        trained models the pipeline LOADS (read-only at run time)
+    intermediate/  files produced DURING a run, one sub-folder per run_name
+    results/       the final output of a run
+(Models still found in the old output/ location are used with a warning.)
+
 This creates:
-    data/titleblock_crops_<run_name>/            cropped title block images
-    output/batch_crop_<run_name>_failed.txt       images without a detected title block
-    output/extracted_metadata_<run_name>.csv      THE output: source_image, node_id, then each
-                                                   field followed by its confidence
-                                                   (node_id is only populated in dataset
-                                                   mode; blank in folder mode)
-    output/routing_<run_name>.csv                 per image: branch, detector score, crop path
+    intermediate/<run_name>/titleblock_crops/     cropped title block images
+    intermediate/<run_name>/routing.csv           per image: branch, detector score, crop path
+    intermediate/<run_name>/no_tb_images.txt      images without a detected title block
+    intermediate/<run_name>/no_tb_debug/          only with --no_tb_debug: per-drawing json + overlay
+    results/extracted_metadata_<run_name>.csv     THE output: source_image, node_id, then each
+                                                  field followed by its confidence
+                                                  (node_id is only populated in dataset
+                                                  mode; blank in folder mode)
 """
 
 import argparse
@@ -113,14 +121,38 @@ from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 from src.input_output import save_output, iter_images
 from src.no_tb import process_no_tb
 
-DETECTOR_MODEL_PATH = "output/title_block_detector_v2.pth"
-FIELD_MODEL_DIR = "output/field_classifier_v2"
+# ---------------------------------------------------------------------------
+# Folder layout
+# ---------------------------------------------------------------------------
+MODELS_DIR = "models"              # trained models the pipeline loads
+INTERMEDIATE_DIR = "intermediate"  # files produced during a run (per run_name)
+RESULTS_DIR = "results"            # final output of a run
+LEGACY_MODELS_DIR = "output"       # old location, still accepted with a warning
 
+DETECTOR_MODEL_PATH = os.path.join(MODELS_DIR, "title_block_detector_v2.pth")
+FIELD_MODEL_DIR = os.path.join(MODELS_DIR, "field_classifier_v2")
+
+
+def resolve_model_path(path):
+    """Model path under models/; falls back to the old output/ location so
+    older checkouts / download scripts keep working until they are moved."""
+    if os.path.exists(path):
+        return path
+    legacy = os.path.join(LEGACY_MODELS_DIR, os.path.basename(path))
+    if os.path.exists(legacy):
+        print(f"Warning: using model from old location '{legacy}'. "
+              f"Move it to '{path}'.")
+        return legacy
+    raise FileNotFoundError(
+        f"Model not found: '{path}' (also checked '{legacy}'). "
+        f"Put the trained model in {MODELS_DIR}/ or run download_models.py."
+    )
 DEFAULT_SOURCE_DIRS = [
     "data/YFA_cabana",
     "data/YFA_cabana_test",
     "data/YFA_state_government",
 ]
+
 DEFAULT_RUN_NAME = "v2"
 
 DETECTOR_NUM_CLASSES = 2
@@ -212,7 +244,7 @@ def parse_args():
     )
     parser.add_argument(
         "--run_name", default=DEFAULT_RUN_NAME,
-        help="Short name used to build all output paths for this run (e.g. 'run_name=demo' produces data/titleblock_crops_demo, output/extracted_metadata_demo.csv, etc.)",
+                help="Short name used to build all paths for this run (e.g. 'run_name=demo' produces intermediate/demo/ and results/extracted_metadata_demo.csv)",
     )
     parser.add_argument(
         "--limit", type=int, default=None,
@@ -236,7 +268,7 @@ def parse_args():
     )
     parser.add_argument(
         "--no_tb_debug", action="store_true",
-        help="No-TB only: dump every OCR word + predicted label (json) and an overlay image to output/no_tb_debug_<run_name>/",
+        help="No-TB only: dump every OCR word + predicted label (json) and an overlay image to intermediate/<run_name>/no_tb_debug/",
     )
     parser.add_argument(
         "--no_tb_upscale", type=float, default=1.0,
@@ -309,7 +341,7 @@ def detect_and_crop_all(images, crop_output_dir, failed_log_path, routing_csv_pa
       {"fname", "image_path", "branch": "tb" | "no_tb", "tb_score", "crop_path"}"""
     print("Loading title block detection model (v2)...")
     detector = build_detector(DETECTOR_NUM_CLASSES)
-    detector.load_state_dict(torch.load(DETECTOR_MODEL_PATH, map_location=device))
+    detector.load_state_dict(torch.load(resolve_model_path(DETECTOR_MODEL_PATH), map_location=device))
     detector.to(device)
     detector.eval()
 
@@ -463,8 +495,9 @@ def classify_fields_to_csv(routes, output_csv_path, node_id_by_filename, args):
     ocr_model = ocr_predictor(pretrained=True)
 
     print("Loading field classification model (v2)...")
-    processor = LayoutLMv3Processor.from_pretrained(FIELD_MODEL_DIR, apply_ocr=False)
-    field_model = LayoutLMv3ForTokenClassification.from_pretrained(FIELD_MODEL_DIR)
+    field_model_dir = resolve_model_path(FIELD_MODEL_DIR)
+    processor = LayoutLMv3Processor.from_pretrained(field_model_dir, apply_ocr=False)
+    field_model = LayoutLMv3ForTokenClassification.from_pretrained(field_model_dir)
     field_model.eval()
 
     os.makedirs(os.path.dirname(output_csv_path) or ".", exist_ok=True)
@@ -503,7 +536,7 @@ def classify_fields_to_csv(routes, output_csv_path, node_id_by_filename, args):
                 route["image_path"], ocr_model, processor, field_model, MODEL_FIELDS,
                 method=args.no_tb_method, target_long=args.no_tb_target_long,
                 ocr_mode=args.no_tb_ocr, upscale=args.no_tb_upscale,
-                debug_dir=f"output/no_tb_debug_{args.run_name}" if args.no_tb_debug else None,
+                debug_dir=os.path.join(args.work_dir, "no_tb_debug") if args.no_tb_debug else None,
             )
             if fields is None:
                 print("  OCR found no text, skipping")
@@ -570,13 +603,19 @@ def classify_fields_to_csv(routes, output_csv_path, node_id_by_filename, args):
 # ---------------------------------------------------------------------------
 
 def main():
+    print("===== Stage 0: start =====\n")
     args = parse_args()
     device = torch.device("cpu")
 
-    crop_output_dir = f"data/titleblock_crops_{args.run_name}"
-    failed_log_path = f"output/batch_crop_{args.run_name}_failed.txt"
-    output_csv_path = f"output/extracted_metadata_{args.run_name}.csv"
-    routing_csv_path = f"output/routing_{args.run_name}.csv"
+    # everything produced during the run -> intermediate/<run_name>/
+    args.work_dir = os.path.join(INTERMEDIATE_DIR, args.run_name)
+    crop_output_dir = os.path.join(args.work_dir, "titleblock_crops")
+    failed_log_path = os.path.join(args.work_dir, "no_tb_images.txt")
+    routing_csv_path = os.path.join(args.work_dir, "routing.csv")
+    # final output -> results/
+    output_csv_path = os.path.join(RESULTS_DIR, f"extracted_metadata_{args.run_name}.csv")
+    os.makedirs(args.work_dir, exist_ok=True)
+    os.makedirs(RESULTS_DIR, exist_ok=True)
 
     images, node_id_by_filename = get_images_and_node_ids(args)
 
@@ -589,6 +628,9 @@ def main():
 
     print("===== Stage 2: OCR + field classification (TB crop / No-TB full sheet) =====\n")
     classify_fields_to_csv(routes, output_csv_path, node_id_by_filename, args)
+    
+    print(f"\nIntermediate files: {args.work_dir}/")
+    print(f"Final result:       {output_csv_path}")
 
 
 if __name__ == "__main__":

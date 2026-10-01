@@ -219,7 +219,7 @@ def print_activation_instructions():
         f"\nThen run the pipeline, e.g.:\n"
         f"    python run_pipeline.py --dataset_name YFA_cabana --run_name demo --limit 10\n"
         f"    python run_pipeline.py --input_dir <folder_of_drawings> --run_name demo\n"
-        f"\nResults: output/extracted_metadata_<run_name>.csv\n"
+        f"\nResults: results/extracted_metadata_<run_name>.csv\n"
         f"Note: docTR downloads its OCR weights on first run (internet needed once).\n"
     )
 

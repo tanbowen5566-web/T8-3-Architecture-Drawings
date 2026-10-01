@@ -220,6 +220,9 @@ __marimo__/
 
 # Ignore local dataset
 data/
+models/
+intermediate/
+results/
 output/
 .DS_Store
 output/

@@ -24,7 +24,7 @@ IMAGE_PATHS = [
 ]
 
 MODEL_PATH = "output/title_block_detector_v0.pth"
-OUTPUT_DIR = "output/predictions_visualized"
+OUTPUT_DIR = "intermediate/predictions_visualized"
 NUM_CLASSES = 2  # background + title_block
 
 # Only draw boxes above this confidence threshold (set low for now, to see

@@ -19,10 +19,10 @@ import torch
 from PIL import Image, ImageDraw
 from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 
-MODEL_DIR = "output/field_classifier_v2"
+MODEL_DIR = "models/field_classifier_v2"
 DATA_PATH = "data/layoutlm_training_data_v3.json"
 IMAGE_DIR = "data/titleblock_crops_v2"
-OUTPUT_DIR = "output/field_predictions_v2_val_visualized"
+OUTPUT_DIR = "intermediate/field_predictions_v2_val_visualized"
 
 LABEL_COLORS = {
     "architect": "#FF6B6B",

@@ -189,7 +189,7 @@ def main():
     num_epochs = 15
     best_val_loss = float("inf")
     best_epoch = -1
-    save_dir = "output/field_classifier_v2"
+    save_dir = "models/field_classifier_v2"
 
     for epoch in range(num_epochs):
         model.train()

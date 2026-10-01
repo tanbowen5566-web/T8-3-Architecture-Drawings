@@ -32,7 +32,7 @@ TEST_IMAGE_PATH = "data/YFA_cabana/456002/1238229_1984-0047-02645-00001.jpg"
 
 DETECTOR_MODEL_PATH = "output/title_block_detector_v0.pth"
 FIELD_MODEL_DIR = "output/field_classifier_v0"
-OUTPUT_DIR = "output/end_to_end_test"
+OUTPUT_DIR = "intermediate/end_to_end_test"
 DETECTION_SCORE_THRESHOLD = 0.5
 CROP_PADDING = 20
 

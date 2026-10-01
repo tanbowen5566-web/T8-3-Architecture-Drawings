@@ -37,7 +37,7 @@ import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from PIL import Image
 
-MODEL_PATH = "output/title_block_detector_v2.pth"
+MODEL_PATH = "models/title_block_detector_v2.pth"
 
 # Defaults used when no command-line arguments are passed (backward compatible)
 DEFAULT_SOURCE_DIRS = [
@@ -46,7 +46,7 @@ DEFAULT_SOURCE_DIRS = [
     "data/YFA_state_government",
 ]
 DEFAULT_OUTPUT_DIR = "data/titleblock_crops_v2"
-DEFAULT_FAILED_LOG_PATH = "output/batch_crop_v2_failed.txt"
+DEFAULT_FAILED_LOG_PATH = "intermediate/batch_crop_v2_failed.txt"
 
 NUM_CLASSES = 2
 SCORE_THRESHOLD = 0.5  # Only trust high-confidence boxes for auto-cropping, to avoid cropping the wrong region

@@ -227,7 +227,7 @@ def main():
     # YFA_cabana + YFA_state_government sources, distinct from the v0/v1
     # versions for easy comparison)
     os.makedirs("output", exist_ok=True)
-    save_path = "output/title_block_detector_v2.pth"
+    save_path = "models/title_block_detector_v2.pth"
     torch.save(model.state_dict(), save_path)
     print(f"Model saved to: {save_path}")
 

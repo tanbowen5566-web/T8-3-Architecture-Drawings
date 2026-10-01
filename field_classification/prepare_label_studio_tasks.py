@@ -18,7 +18,7 @@ Usage:
     python prepare_label_studio_tasks.py
 
 Output:
-    output/label_studio_import_tasks.json      -> for direct import into Label Studio
+    intermediate/label_studio_import_tasks.json      -> for direct import into Label Studio
     data/ocr_words_char_map/*.json             -> word <-> character position mapping (for post-processing)
 """
 
@@ -27,7 +27,7 @@ import os
 
 INPUT_DIR = "data/ocr_words_v2"
 CHAR_MAP_DIR = "data/ocr_words_char_map_v2"
-TASKS_OUTPUT_PATH = "output/label_studio_import_tasks_v2.json"
+TASKS_OUTPUT_PATH = "intermediate/label_studio_import_tasks_v2.json"
 
 
 def build_text_and_char_map(words):

@@ -244,4 +244,4 @@ if __name__ == "__main__":
         }
     ]
 
-    save_output(test_results, "output/test_extracted_metadata.csv")
+    save_output(test_results, "intermediate/io_test/test_extracted_metadata.csv")

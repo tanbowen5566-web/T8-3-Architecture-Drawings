@@ -2,7 +2,7 @@
 download_models.py
 
 Purpose: Download the trained model files (title block detector + LayoutLMv3
-         field classifier) from this repo's GitHub Release into output/, so
+         field classifier) from this repo's GitHub Release into models/, so
          that run_pipeline.py works right after setup. The model files are
          too large for a normal git repo (GitHub's limit is 100 MB per file),
          so they are published as Release assets instead.
@@ -40,7 +40,7 @@ import zipfile
 
 REPO = "tanbowen5566-web/T8-3-Architecture-Drawings"
 RELEASE_TAG = "model-v2"
-OUTPUT_DIR = "output"
+OUTPUT_DIR = "models"
 
 # asset name -> {sha256, path that must exist afterwards, unzip?}
 MODELS = {
