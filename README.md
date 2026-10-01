@@ -136,36 +136,58 @@ Setup takes several minutes; installing dependencies is the slowest part. It:
 
 ### Step 3: Check that setup succeeded
 
-**Success:** among the other output, you should see a green ✓ for every step and `Setup complete!` at the end:
+At the end, setup prints a **summary** of its five steps. **Success** looks like this:
 
 ```
-✓ Python version 3.11 meets the requirement
-✓ Virtual environment created at ./venv
-✓ Dependencies installed successfully
-✓ Models downloaded
+============================================================
+ Setup summary
+============================================================
+ ✓ 1. Check Python version         Python 3.11
+ ✓ 2. Find requirements.txt        found
+ ✓ 3. Create virtual environment   created ./venv
+ ✓ 4. Install dependencies         installed
+ ✓ 5. Download trained models      models/ ready
 
 ==> Setup complete!
 ```
 
-`models/` should now contain `title_block_detector_v2.pth` and a `field_classifier_v2/` folder. Go to [Step 4](#step-4-activate-the-environment).
+`models/` now contains `title_block_detector_v2.pth` and a `field_classifier_v2/` folder. Go to [Step 4](#step-4-activate-the-environment).
 
-**If you see an error**, find it in this table. After fixing it, run setup again (Step 2): it picks up where it stopped.
+**If a step failed**, the summary marks it with ✗ and, below the list, says what went wrong (**Problem**) and what to do (**Fix**), for example:
 
-| Message | What to do |
-|---|---|
-| `Current Python version is 3.9, but this project requires Python 3.11 or higher.` (any version below 3.11) | Python 3.11 is not installed, or setup was started with an older one. Install it as in [Step 2](#step-2-run-setup), then run setup with the version written explicitly: `python3.11 setup.py` (Mac/Linux) or `py -3.11 setup.py` (Windows) |
-| `command not found: python3` / `command not found: python3.11` (Mac/Linux) | Python 3.11 is not installed. Install it as in [Step 2](#mac). If you just installed it, close and reopen Terminal |
-| `Python was not found; run without arguments to install from the Microsoft Store…` or `'py' is not recognized…` (Windows) | Python is not installed or not on PATH. Install it as in [Step 2](#windows), with **"Add python.exe to PATH"** ticked, then close and reopen PowerShell |
-| `can't open file '…setup.py': [Errno 2] No such file or directory` | The terminal is not in the project folder. Go back into it as in [Step 1](#step-1-get-the-project) (`cd` into the folder that contains `setup.py`) |
-| `Could not find requirements.txt. Make sure you're running this script from the project root.` | Same as above: you are in the wrong folder |
-| `Failed to create virtual environment. Make sure Python's venv module is installed.` | Linux: install the `venv` package shown in the message (e.g. `sudo apt install python3.11-venv`). Mac/Windows: reinstall Python from [python.org](https://www.python.org/downloads/) |
-| `Could not find the Python executable. Make sure Python is installed and added to PATH.` | Reinstall Python from [python.org](https://www.python.org/downloads/) with **"Add python.exe to PATH"** ticked (Windows) |
-| `Could not find Python inside the virtual environment: …` | A previous setup was interrupted and left a broken `venv` folder. Delete the `venv` folder inside the project folder and run setup again |
-| `Failed to install dependencies.` | Usually a dropped internet connection: check it and run setup again. Scroll up to the first red error line for the cause. `No space left on device`: free up disk space (about 3 GB is needed). `Could not find a version that satisfies the requirement torch…`: you are using 32-bit Python or a Python version PyTorch does not support yet; install 64-bit Python 3.11 and run setup with `py -3.11` / `python3.11` |
-| `Model download failed.` with **HTTP 404** above it | GitHub does not know who you are, or your account has no access to the private repository. Do [Option B steps 1–2](#option-b-download-from-github) (install `gh`, `gh auth login`), make sure you have been added as a collaborator, then run setup again. Or download the models by hand: see the next row |
-| `Model download failed.` for another reason (firewall, no internet) | Download by hand: on the repository's **Releases** page open `models-v2`, put `title_block_detector_v2.pth` in `models/`, and unzip `field_classifier_v2.zip` into `models/` (it contains a `field_classifier_v2/` folder) |
-| `SSL: CERTIFICATE_VERIFY_FAILED` (Mac) | Python from python.org needs its certificates installed once: open **Applications → Python 3.11** and double-click **Install Certificates.command**, then run setup again |
-| `Setup was interrupted by the user.` | Setup was stopped (e.g. Ctrl+C). Run it again |
+```
+ ✓ 1. Check Python version         Python 3.11
+ ✓ 2. Find requirements.txt        found
+ ✓ 3. Create virtual environment   created ./venv
+ ✗ 4. Install dependencies         FAILED
+ – 5. Download trained models      not run
+
+✗ Step 4 failed: Install dependencies
+  Problem: pip failed while installing the packages in requirements.txt (exit code 1).
+  Fix:     Scroll up to the first line starting with 'ERROR:' just above this summary; it names the cause.
+           ...
+```
+
+Follow the **Fix**, then run setup again ([Step 2](#step-2-run-setup)). Steps that already succeeded are reused, so it continues where it stopped. If only step 5 failed, the environment is usable but the pipeline cannot run until the models are in place.
+
+The table below covers every failed step, plus errors that appear before setup can even start.
+
+| Where it fails | Message | What to do |
+|---|---|---|
+| Before setup starts (Mac/Linux) | `command not found: python3` / `command not found: python3.11` | Python 3.11 is not installed. Install it as in [Step 2](#mac). If you just installed it, close and reopen Terminal |
+| Before setup starts (Windows) | `Python was not found; run without arguments to install from the Microsoft Store…` or `'py' is not recognized…` | Python is not installed or not on PATH. Install it as in [Step 2](#windows), with **"Add python.exe to PATH"** ticked, then close and reopen PowerShell |
+| Before setup starts | `can't open file '…setup.py': [Errno 2] No such file or directory` | The terminal is not in the project folder. Go back into it as in [Step 1](#step-1-get-the-project) (`cd` into the folder that contains `setup.py`) |
+| Step 1: Check Python version | `Current Python version is 3.9, but this project requires Python 3.11 or higher.` (any version below 3.11) | Setup was started with an older Python. Install 3.11 as in [Step 2](#step-2-run-setup), then run setup with the version written explicitly: `python3.11 setup.py` (Mac/Linux) or `py -3.11 setup.py` (Windows) |
+| Step 2: Find requirements.txt | `requirements.txt is missing from the project folder` | The project folder is incomplete. Get the project again ([Step 1](#step-1-get-the-project)) |
+| Step 3: Create virtual environment | `'… -m venv venv' failed` | Linux: install the `venv` package shown under Fix (e.g. `sudo apt install python3.11-venv`). Mac/Windows: reinstall Python from [python.org](https://www.python.org/downloads/) |
+| Step 3: Create virtual environment | `The existing 'venv' folder is broken and could not be deleted` | Close any terminal or editor using the project, delete the `venv` folder by hand, run setup again. (A broken or outdated `venv` folder is normally rebuilt automatically) |
+| Step 4: Install dependencies | `pip failed while …` | Scroll up to the first line starting with `ERROR:`. Connection errors: check the internet connection and run setup again. `No space left on device`: free about 3 GB. `Could not find a version that satisfies the requirement torch…`: you are using 32-bit Python or a version PyTorch does not support yet; install 64-bit Python 3.11 and run setup with `py -3.11` / `python3.11` |
+| Step 5: Download trained models | `GitHub answered 'not found' (HTTP 404)` | GitHub does not know who you are, or your account has no access to the private repository. Do [Option B steps 1–2](#option-b-download-from-github) (install `gh`, `gh auth login`), make sure you have been added as a collaborator, then run setup again. Or download the models by hand (next rows) |
+| Step 5: Download trained models | `GitHub rejected the login (HTTP 401/403)` | The saved login or token has expired. Run `gh auth login` again, then run setup again |
+| Step 5: Download trained models | `Python could not verify GitHub's SSL certificate` (Mac) | Python from python.org needs its certificates installed once: open **Applications → Python 3.11** and double-click **Install Certificates.command**, then run setup again |
+| Step 5: Download trained models | `A downloaded model file is corrupted (checksum mismatch)` | Activate the environment ([Step 4](#step-4-activate-the-environment)), then run `python download_models.py --force` |
+| Step 5: Download trained models | `Could not reach GitHub` (no internet, firewall) | Check the connection and run setup again, or download by hand: on the repository's **Releases** page open `models-v2`, put `title_block_detector_v2.pth` in `models/`, and unzip `field_classifier_v2.zip` into `models/` (it contains a `field_classifier_v2/` folder) |
+| Any step | `! Setup was interrupted during step …` | Setup was stopped (e.g. Ctrl+C). Run it again; finished steps are reused |
 
 Anything else: send the full text in the terminal to the team.
 
