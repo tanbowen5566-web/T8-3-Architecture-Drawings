@@ -165,24 +165,26 @@ Setup ends with a summary. **Success** looks like this:
   ```
 
 - **✗ 4. Install dependencies**: usually the internet connection dropped. Check it and run setup again. Otherwise, the first line starting with `ERROR:` above the summary names the cause.
-- **✗ 5. Download trained models**:When step 5 fails, everything else is already set up; only the two model files are missing. Get them from GitHub instead:
-1. Open the [Releases page](https://github.com/tanbowen5566-web/T8-3-Architecture-Drawings/releases) and find the release **`models-v2`**.
-2. Under **Assets**, download **`title_block_detector_v2.pth`** and **`field_classifier_v2.zip`**.
-3. In the project folder, open the **`models`** folder. If there is none, create a folder named exactly `models` (in VS Code: right-click in the file list on the left → **New Folder…**).
-4. Move **`title_block_detector_v2.pth`** into `models`.
-5. Unzip **`field_classifier_v2.zip`** (Mac: double-click it; Windows: right-click → **Extract All**) and move the resulting **`field_classifier_v2`** folder into `models`.
-If a file or folder with the same name is already in `models`, replace it. The result must look like this:
+- **✗ 5. Download trained models**: everything else is already set up; only the two model files are missing. Get them from GitHub instead:
+  1. Open the [Releases page](https://github.com/tanbowen5566-web/T8-3-Architecture-Drawings/releases) and find the release **`models-v2`**.
+  2. Under **Assets**, download **`title_block_detector_v2.pth`** and **`field_classifier_v2.zip`**.
+  3. In the project folder, open the **`models`** folder. If there is none, create a folder named exactly `models` (in VS Code: right-click in the file list on the left → **New Folder…**).
+  4. Move **`title_block_detector_v2.pth`** into `models`.
+  5. Unzip **`field_classifier_v2.zip`** (Mac: double-click it; Windows: right-click → **Extract All**) and move the resulting **`field_classifier_v2`** folder into `models`.
+
+  If a file or folder with the same name is already in `models`, replace it. The result must look like this:
+
 ```text
-models/
-├── title_block_detector_v2.pth
-└── field_classifier_v2/
-    ├── config.json
-    └── ...
+  models/
+  ├── title_block_detector_v2.pth
+  └── field_classifier_v2/
+      ├── config.json
+      └── ...
 ```
 
-On Windows, **Extract All** sometimes creates a folder inside a folder (`field_classifier_v2/field_classifier_v2/`). If so, move the inner folder into `models` so that `models/field_classifier_v2/config.json` exists.
+  On Windows, **Extract All** sometimes creates a folder inside a folder (`field_classifier_v2/field_classifier_v2/`). If so, move the inner folder into `models` so that `models/field_classifier_v2/config.json` exists.
 
-There is no need to run setup again: continue with [Step 3](#step-3-activate-the-environment).
+  There is no need to run setup again: continue with [Step 3](#step-3-activate-the-environment).
 
 ### Step 3: Activate the environment
 
@@ -257,6 +259,8 @@ Both options give the same result. They differ only in where the dataset folder 
 ### Step 5: Run the pipeline
 
 Make sure the terminal line starts with `(venv)` ([Step 3](#step-3-activate-the-environment)). Copy the command for your option, paste it into the terminal, and change only the parts in **CAPITALS** before pressing Enter.
+> [!CAUTION]
+> **After pressing Enter, the terminal may show nothing for a minute or two.**
 
 #### Option A: dataset in `data/`
 
@@ -281,7 +285,9 @@ python run_pipeline.py --input_dir "/PATH/TO/YOUR/FOLDER" --run_name MY_FIRST_RU
 | `"/PATH/TO/YOUR/FOLDER"` | The path you copied in Step 4. The quotes must stay, because paths often contain spaces. **Mac:** paste between the quotes, e.g. `"/Users/anna/Desktop/YFA_cabana"`. **Windows:** the copied path already has quotes, so replace the quotes and everything between them, e.g. `"C:\Users\anna\Desktop\YFA_cabana"` |
 | `MY_FIRST_RUN`, `--limit 10` | As in Option A |
 
-The terminal shows progress for each drawing. The very first run also downloads the OCR model weights once (internet needed). Everything runs on the computer's processor, so a full dataset can take a long time; drawings without a title block are the slowest.
+The pipeline is loading its models, and the very first run also downloads the OCR model weights once (internet needed), which can take a few minutes more. It is not frozen: don't close the terminal or press Enter again. Once loading is done, the terminal shows progress for each drawing.
+>
+> Everything runs on the computer's processor, so a full dataset can take a long time; drawings without a title block are the slowest. If nothing at all has appeared after 10 minutes, press **Ctrl+C** and send the text in the terminal to the team.
 
 ### Step 6: Open the results
 
