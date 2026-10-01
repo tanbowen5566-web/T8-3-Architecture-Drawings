@@ -11,7 +11,6 @@ Give the pipeline a folder of scanned drawings and it returns a CSV with the key
 ## Contents
 
 1. [Quick start: from a fresh computer to a CSV](#quick-start-from-a-fresh-computer-to-a-csv)
-   (Step 7 covers [getting updates](#step-7-getting-updates))
 2. [How it works](#how-it-works)
 3. [Commands and options](#commands-and-options)
 4. [Output files](#output-files)
@@ -25,123 +24,115 @@ Give the pipeline a folder of scanned drawings and it returns a CSV with the key
 
 ## Quick start: from a fresh computer to a CSV
 
-Seven steps, in order. Each step has instructions for **Mac**, **Windows** and **Linux**; follow only the ones for your computer. Commands go in a terminal: **Terminal** on Mac (Applications → Utilities), **PowerShell** on Windows (Start menu → type "PowerShell").
+This guide starts from the project folder you received. Setup needs about 3 GB of free disk space and an internet connection; after that, the pipeline runs offline.
 
-You will need about 3 GB of free disk space and an internet connection during setup. After that, the pipeline runs offline.
+**Where to type the commands:** open the project folder in [VS Code](https://code.visualstudio.com) (**File → Open Folder…** and choose the project folder), then open its terminal with **Terminal → New Terminal**. This terminal already starts in the project folder, so every command below can be copied into it as it is. Each command is in its own box: hover over the box and click the copy icon on its right.
 
-### Step 1: Get the project
-
-There are two ways to get the project. Use the one that matches how you received it.
-
-#### Option A: you received a zip file
-
-1. **Unzip it.** Mac: double-click the zip. Windows: right-click the zip → **Extract All** → **Extract** (do not open files from inside the zip without extracting first).
-2. **Move the unzipped folder** somewhere permanent, e.g. your Documents folder.
-3. **Open a terminal in that folder:**
-   - **Mac:** open Terminal, type `cd ` (with a space after it), drag the project folder from Finder into the Terminal window, and press Enter.
-   - **Windows:** open the project folder in File Explorer, click the address bar at the top, type `powershell` and press Enter.
-   - **Linux:** `cd /path/to/T8-3-Architecture-Drawings`
-
-If the zip already contains a `models/` folder, no GitHub account is needed: go straight to [Step 2](#step-2-run-setup). If it does not, setup will download the models from GitHub, which requires access to the repository: do steps 1 and 2 of Option B (install `gh`, then log in) before running setup.
-
-#### Option B: download from GitHub
-
-This needs a GitHub account that has been **added as a collaborator** on the repository (ask the repository owner), because the repository is private.
-
-1. **Install Git and the GitHub CLI** (one time only):
-
-   | System | Command |
-   |---|---|
-   | Mac | `brew install git gh` (requires [Homebrew](https://brew.sh), see [Step 2](#mac)) |
-   | Windows | `winget install --id Git.Git` and then `winget install --id GitHub.cli`. Close and reopen PowerShell afterwards. No `winget`? Use the installers from [git-scm.com](https://git-scm.com/downloads) and [cli.github.com](https://cli.github.com) |
-   | Linux | `sudo apt install git` (or `sudo dnf install git`), then `gh` from the [official Linux instructions](https://github.com/cli/cli/blob/trunk/docs/install_linux.md) |
-
-2. **Log in to GitHub** (one time per computer):
-
-   ```bash
-   gh auth login
-   ```
-
-   Choose **GitHub.com → HTTPS → Yes → Login with a web browser**, and follow the prompts. On a server with no browser, `gh` shows a one-time code: open the link it gives on any other device and enter the code there.
-
-3. **Download (clone) the project and enter its folder:**
-
-   ```bash
-   gh repo clone tanbowen5566-web/T8-3-Architecture-Drawings
-   cd T8-3-Architecture-Drawings
-   ```
-
-   This creates a folder called `T8-3-Architecture-Drawings` inside whichever folder your terminal was in (usually your home folder).
-
-### Step 2: Run setup
-
-Setup needs **Python 3.11 or newer**. Install it first if you don't have it, then run setup **from inside the project folder** (the terminal from Step 1).
+### Step 1: Run setup
 
 #### Mac
 
-1. **Check your Python version:** `python3 --version`. If it prints 3.11 or higher, skip to 3.
-2. **Install Python 3.11**, either way:
-   - **Easiest:** download the macOS installer from [python.org](https://www.python.org/downloads/macos/) and run it. Then open **Applications → Python 3.11** and double-click **Install Certificates.command** (this prevents download errors later).
-   - **With Homebrew:** install [Homebrew](https://brew.sh) by pasting this into Terminal, and run the "Next steps" commands it prints at the end:
+1. Check your Python version:
+
+   ```bash
+   python3 --version
+   ```
+
+   If it shows 3.11 or higher, go straight to step 3.
+
+2. Install Python 3.11, either way:
+   - **Easiest:** run the macOS installer from [python.org](https://www.python.org/downloads/macos/). Then open **Applications → Python 3.11** and double-click **Install Certificates.command**.
+   - **With [Homebrew](https://brew.sh):**
 
      ```bash
-     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+     brew install python@3.11
      ```
 
-     Then: `brew install python@3.11`
-3. **Run setup.** If you installed Python 3.11 in step 2:
+   Then close the terminal and open a new one (**Terminal → New Terminal**).
+
+3. Run setup. If you installed Python 3.11 in step 2:
 
    ```bash
    python3.11 setup.py
    ```
 
-   If `python3 --version` already showed 3.11 or higher: `python3 setup.py`
+   If `python3 --version` already showed 3.11 or higher:
+
+   ```bash
+   python3 setup.py
+   ```
 
 #### Windows
 
-1. **Check your Python version:** `py --version`. If it prints 3.11 or higher, skip to 3.
-2. **Install Python 3.11**, either way:
-   - `winget install --id Python.Python.3.11`, then close and reopen PowerShell (and go back to the project folder as in Step 1).
-   - Or download the installer from [python.org](https://www.python.org/downloads/windows/) (64-bit). On the first screen, tick **"Add python.exe to PATH"**.
-3. **Run setup:**
+1. Check your Python version:
 
-   ```bat
+   ```powershell
+   py --version
+   ```
+
+   If it shows 3.11 or higher, go straight to step 3.
+
+2. Install Python 3.11, either with this command or with the 64-bit installer from [python.org](https://www.python.org/downloads/windows/) (tick **"Add python.exe to PATH"**):
+
+   ```powershell
+   winget install --id Python.Python.3.11
+   ```
+
+   Then close the terminal and open a new one (**Terminal → New Terminal**).
+
+3. Run setup:
+
+   ```powershell
    py setup.py
    ```
 
-   (`py` automatically uses the newest Python installed.)
-
 #### Linux
 
-1. **Install Python 3.11 and its `venv` module** (the system Python is often too old or lacks `venv`):
+1. Install Python 3.11 and its `venv` module, with the command for your distribution:
 
-   | Distribution | Command |
-   |---|---|
-   | Ubuntu 22.04 (system Python is 3.10) | `sudo apt install python3.11 python3.11-venv` |
-   | Ubuntu 24.04 / Debian 12 | `sudo apt install python3-venv` |
-   | RHEL / Rocky / Alma 9 | `sudo dnf install python3.11` |
+   Ubuntu 22.04:
 
-2. **Run setup:** `python3.11 setup.py` (on Ubuntu 24.04 / Debian 12: `python3 setup.py`)
+   ```bash
+   sudo apt install python3.11 python3.11-venv
+   ```
 
-On Linux, setup installs the **CPU-only** build of PyTorch, which is several GB smaller than the default. The pipeline runs on CPU, so nothing is lost. To install the default (CUDA) build instead, add `--cuda`.
+   Ubuntu 24.04 / Debian 12:
 
-#### What setup does
+   ```bash
+   sudo apt install python3-venv
+   ```
 
-Setup takes several minutes; installing dependencies is the slowest part. It:
+   RHEL / Rocky / Alma 9:
 
-1. Checks the Python version
-2. Creates a virtual environment in `venv/` (a private copy of Python for this project)
-3. Installs the dependencies from `requirements.txt`
-4. Downloads the trained models from the GitHub Release `models-v2` into `models/` (skipped for models that are already there)
+   ```bash
+   sudo dnf install python3.11
+   ```
 
-### Step 3: Check that setup succeeded
+2. Run setup:
 
-At the end, setup prints a **summary** of its five steps. **Success** looks like this:
+   ```bash
+   python3.11 setup.py
+   ```
 
-```
-============================================================
- Setup summary
-============================================================
+   On Ubuntu 24.04 / Debian 12:
+
+   ```bash
+   python3 setup.py
+   ```
+
+   Linux gets the smaller CPU-only build of PyTorch. To install the default (CUDA) build instead, for a machine with an NVIDIA GPU:
+
+   ```bash
+   python3.11 setup.py --cuda
+   ```
+
+Setup takes several minutes. It checks Python, creates a private Python environment in `venv/`, installs the dependencies and puts the trained models in `models/`.
+
+### Step 2: Check that setup succeeded
+
+Setup ends with a summary. **Success** looks like this:
+
+```text
  ✓ 1. Check Python version         Python 3.11
  ✓ 2. Find requirements.txt        found
  ✓ 3. Create virtual environment   created ./venv
@@ -151,55 +142,69 @@ At the end, setup prints a **summary** of its five steps. **Success** looks like
 ==> Setup complete!
 ```
 
-`models/` now contains `title_block_detector_v2.pth` and a `field_classifier_v2/` folder. Go to [Step 4](#step-4-activate-the-environment).
+**If a step failed**, it is marked ✗, and below the list the summary shows the **Problem** and the **Fix**. Follow the Fix and run setup again; finished steps are reused. The most common cases:
 
-**If a step failed**, the summary marks it with ✗ and, below the list, says what went wrong (**Problem**) and what to do (**Fix**), for example:
+- **`command not found: python3`** (Mac), or **`Python was not found`** / **`'py' is not recognized`** (Windows): Python is not installed. Install it as in [Step 1](#step-1-run-setup), then open a new terminal.
+- **`can't open file '…setup.py'`**: VS Code has a different folder open. Use **File → Open Folder…** to open the project folder itself (the one that contains `setup.py`), then open a new terminal.
+- **✗ 1. Check Python version**: setup was started with an older Python. Run it with the version named. Mac / Linux:
 
+  ```bash
+  python3.11 setup.py
+  ```
+
+  Windows:
+
+  ```powershell
+  py -3.11 setup.py
+  ```
+
+- **✗ 3. Create virtual environment** (Linux): the `venv` module is missing. Install it, then run setup again:
+
+  ```bash
+  sudo apt install python3.11-venv
+  ```
+
+- **✗ 4. Install dependencies**: usually the internet connection dropped. Check it and run setup again. Otherwise, the first line starting with `ERROR:` above the summary names the cause.
+- **✗ 5. Download trained models**:When step 5 fails, everything else is already set up; only the two model files are missing. Get them from GitHub instead:
+1. Open the [Releases page](https://github.com/tanbowen5566-web/T8-3-Architecture-Drawings/releases) and find the release **`models-v2`**.
+2. Under **Assets**, download **`title_block_detector_v2.pth`** and **`field_classifier_v2.zip`**.
+3. In the project folder, open the **`models`** folder. If there is none, create a folder named exactly `models` (in VS Code: right-click in the file list on the left → **New Folder…**).
+4. Move **`title_block_detector_v2.pth`** into `models`.
+5. Unzip **`field_classifier_v2.zip`** (Mac: double-click it; Windows: right-click → **Extract All**) and move the resulting **`field_classifier_v2`** folder into `models`.
+If a file or folder with the same name is already in `models`, replace it. The result must look like this:
+```text
+models/
+├── title_block_detector_v2.pth
+└── field_classifier_v2/
+    ├── config.json
+    └── ...
 ```
- ✓ 1. Check Python version         Python 3.11
- ✓ 2. Find requirements.txt        found
- ✓ 3. Create virtual environment   created ./venv
- ✗ 4. Install dependencies         FAILED
- – 5. Download trained models      not run
 
-✗ Step 4 failed: Install dependencies
-  Problem: pip failed while installing the packages in requirements.txt (exit code 1).
-  Fix:     Scroll up to the first line starting with 'ERROR:' just above this summary; it names the cause.
-           ...
+On Windows, **Extract All** sometimes creates a folder inside a folder (`field_classifier_v2/field_classifier_v2/`). If so, move the inner folder into `models` so that `models/field_classifier_v2/config.json` exists.
+
+There is no need to run setup again: continue with [Step 3](#step-3-activate-the-environment).
+
+### Step 3: Activate the environment
+
+Do this **every time** you open a new terminal to use the pipeline. Skip it if the line in the terminal already starts with `(venv)`.
+
+Mac / Linux:
+
+```bash
+source venv/bin/activate
 ```
 
-Follow the **Fix**, then run setup again ([Step 2](#step-2-run-setup)). Steps that already succeeded are reused, so it continues where it stopped. If only step 5 failed, the environment is usable but the pipeline cannot run until the models are in place.
+Windows (PowerShell, the default terminal in VS Code):
 
-The table below covers every failed step, plus errors that appear before setup can even start.
+```powershell
+venv\Scripts\Activate.ps1
+```
 
-| Where it fails | Message | What to do |
-|---|---|---|
-| Before setup starts (Mac/Linux) | `command not found: python3` / `command not found: python3.11` | Python 3.11 is not installed. Install it as in [Step 2](#mac). If you just installed it, close and reopen Terminal |
-| Before setup starts (Windows) | `Python was not found; run without arguments to install from the Microsoft Store…` or `'py' is not recognized…` | Python is not installed or not on PATH. Install it as in [Step 2](#windows), with **"Add python.exe to PATH"** ticked, then close and reopen PowerShell |
-| Before setup starts | `can't open file '…setup.py': [Errno 2] No such file or directory` | The terminal is not in the project folder. Go back into it as in [Step 1](#step-1-get-the-project) (`cd` into the folder that contains `setup.py`) |
-| Step 1: Check Python version | `Current Python version is 3.9, but this project requires Python 3.11 or higher.` (any version below 3.11) | Setup was started with an older Python. Install 3.11 as in [Step 2](#step-2-run-setup), then run setup with the version written explicitly: `python3.11 setup.py` (Mac/Linux) or `py -3.11 setup.py` (Windows) |
-| Step 2: Find requirements.txt | `requirements.txt is missing from the project folder` | The project folder is incomplete. Get the project again ([Step 1](#step-1-get-the-project)) |
-| Step 3: Create virtual environment | `'… -m venv venv' failed` | Linux: install the `venv` package shown under Fix (e.g. `sudo apt install python3.11-venv`). Mac/Windows: reinstall Python from [python.org](https://www.python.org/downloads/) |
-| Step 3: Create virtual environment | `The existing 'venv' folder is broken and could not be deleted` | Close any terminal or editor using the project, delete the `venv` folder by hand, run setup again. (A broken or outdated `venv` folder is normally rebuilt automatically) |
-| Step 4: Install dependencies | `pip failed while …` | Scroll up to the first line starting with `ERROR:`. Connection errors: check the internet connection and run setup again. `No space left on device`: free about 3 GB. `Could not find a version that satisfies the requirement torch…`: you are using 32-bit Python or a version PyTorch does not support yet; install 64-bit Python 3.11 and run setup with `py -3.11` / `python3.11` |
-| Step 5: Download trained models | `GitHub answered 'not found' (HTTP 404)` | GitHub does not know who you are, or your account has no access to the private repository. Do [Option B steps 1–2](#option-b-download-from-github) (install `gh`, `gh auth login`), make sure you have been added as a collaborator, then run setup again. Or download the models by hand (next rows) |
-| Step 5: Download trained models | `GitHub rejected the login (HTTP 401/403)` | The saved login or token has expired. Run `gh auth login` again, then run setup again |
-| Step 5: Download trained models | `Python could not verify GitHub's SSL certificate` (Mac) | Python from python.org needs its certificates installed once: open **Applications → Python 3.11** and double-click **Install Certificates.command**, then run setup again |
-| Step 5: Download trained models | `A downloaded model file is corrupted (checksum mismatch)` | Activate the environment ([Step 4](#step-4-activate-the-environment)), then run `python download_models.py --force` |
-| Step 5: Download trained models | `Could not reach GitHub` (no internet, firewall) | Check the connection and run setup again, or download by hand: on the repository's **Releases** page open `models-v2`, put `title_block_detector_v2.pth` in `models/`, and unzip `field_classifier_v2.zip` into `models/` (it contains a `field_classifier_v2/` folder) |
-| Any step | `! Setup was interrupted during step …` | Setup was stopped (e.g. Ctrl+C). Run it again; finished steps are reused |
+Windows (Command Prompt):
 
-Anything else: send the full text in the terminal to the team.
-
-### Step 4: Activate the environment
-
-Do this **every time** you open a new terminal to use the pipeline, from inside the project folder.
-
-| System | Command |
-|---|---|
-| Mac / Linux | `source venv/bin/activate` |
-| Windows PowerShell | `venv\Scripts\Activate.ps1` |
-| Windows Command Prompt (cmd) | `venv\Scripts\activate` |
+```bat
+venv\Scripts\activate
+```
 
 It worked if the line in your terminal now starts with `(venv)`. From here on, type `python` on every system (not `python3` or `py`).
 
@@ -209,41 +214,49 @@ If PowerShell says **`Activate.ps1 cannot be loaded because running scripts is d
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-### Step 5: Add the drawings
+### Step 4: Add the drawings
 
-The drawings are not part of the project; you add them yourself. Choose one option.
+#### 1. Check the folder layout
 
-#### Option A: a dataset folder with `metadata.csv` (records Node IDs)
+The pipeline only accepts drawings in a **dataset folder** with exactly this layout:
 
-Use this when your drawings come with a `metadata.csv`, so every row of the result can be traced back to its Node ID.
+```text
+YFA_cabana/                      ← dataset folder (any name)
+├── metadata.csv                 ← directly in the dataset folder; must have a column named exactly "Node ID"
+├── 455992/                      ← one folder per Node ID, named exactly as in metadata.csv
+│   └── 1238196_….jpg            ← the drawing image(s) of that Node ID (.jpg, any file name)
+├── 455993/
+│   └── ….jpg
+└── ...
+```
 
-1. **Check the folder layout.** It must look like this:
+Check three things: `metadata.csv` sits directly inside the dataset folder (not in a subfolder), every drawing is inside a Node ID folder, and every Node ID folder name appears in the `Node ID` column of `metadata.csv`.
 
-   ```
-   YFA_cabana/                 ← dataset folder (any name)
-   ├── metadata.csv            ← must have a column named exactly "Node ID"
-   ├── 455992/                 ← one folder per Node ID, named exactly as in metadata.csv
-   │   └── 455992_001.jpg      ← the drawings (.jpg)
-   ├── 455993/
-   └── ...
-   ```
+#### 2. Choose where the folder goes
 
-2. **Drag the whole dataset folder into the `data` folder** inside the project folder (create a folder named `data` there if it doesn't exist). The result is `data/YFA_cabana/metadata.csv`, `data/YFA_cabana/455992/…`.
+Both options give the same result. They differ only in where the dataset folder is kept, which changes the command in [Step 5](#step-5-run-the-pipeline).
 
-Datasets used by the team: `YFA_cabana`, `YFA_state_government`, `Bates_smart_Mccutcheon` (most Bates drawings have no title block and go through the No-TB branch, see [How it works](#how-it-works)).
+- **Option A: inside the project.** Drag the whole dataset folder into the `data` folder inside the project folder (you can drag it straight into VS Code's file list on the left; create a folder named `data` if it doesn't exist). `data` can hold several datasets side by side:
 
-#### Option B: any folder of drawings (no Node IDs)
+  ```text
+  data/
+  ├── Bates_smart_Mccutcheon/
+  ├── YFA_cabana/
+  │   ├── metadata.csv
+  │   ├── 455992/
+  │   └── ...
+  └── YFA_state_government/
+  ```
 
-Use this for a plain folder of `.jpg` drawings anywhere on your computer (e.g. on the Desktop). No `metadata.csv` and no moving needed, but the result will have no Node ID.
+  In Step 5 you then refer to the dataset by its **folder name**.
 
-You only need to copy the folder's **path** (its full location), which goes into the command in Step 6:
+- **Option B: anywhere else** (e.g. on the Desktop or an external drive). Leave the dataset folder where it is (same layout as above) and copy the **path of the dataset folder itself** (e.g. of `YFA_cabana`, not of a Node ID folder inside it); in Step 5 you then refer to it by this path.
+  - **Mac:** in Finder, right-click the folder, hold the **Option** key, and choose **Copy "…" as Pathname**.
+  - **Windows:** in File Explorer, right-click the folder → **Copy as path** (on Windows 10, hold **Shift** while right-clicking).
 
-- **Mac:** in Finder, right-click the folder, hold the **Option** key, and choose **Copy "…" as Pathname**.
-- **Windows:** in File Explorer, right-click the folder → **Copy as path** (on Windows 10, hold **Shift** while right-clicking).
+### Step 5: Run the pipeline
 
-### Step 6: Run the pipeline
-
-Make sure `(venv)` is shown (Step 4). Copy the command for your option and change only the parts in **CAPITALS**.
+Make sure the terminal line starts with `(venv)` ([Step 3](#step-3-activate-the-environment)). Copy the command for your option, paste it into the terminal, and change only the parts in **CAPITALS** before pressing Enter.
 
 #### Option A: dataset in `data/`
 
@@ -257,7 +270,7 @@ python run_pipeline.py --dataset_name YFA_cabana --run_name MY_FIRST_RUN --limit
 | `MY_FIRST_RUN` | Any new name for this run, using letters, numbers and `_` only (no spaces). Use a **different name for every run**: reusing a name overwrites that run's results |
 | `--limit 10` | Processes only the first 10 drawings, for a quick check. **Delete `--limit 10`** to process the whole dataset |
 
-#### Option B: any folder
+#### Option B: dataset anywhere else
 
 ```bash
 python run_pipeline.py --input_dir "/PATH/TO/YOUR/FOLDER" --run_name MY_FIRST_RUN --limit 10
@@ -265,45 +278,30 @@ python run_pipeline.py --input_dir "/PATH/TO/YOUR/FOLDER" --run_name MY_FIRST_RU
 
 | Part | Change it to |
 |---|---|
-| `"/PATH/TO/YOUR/FOLDER"` | The path you copied in Step 5. The quotes must stay, because paths often contain spaces. **Mac:** paste between the quotes, e.g. `"/Users/anna/Desktop/Drawings 1965"`. **Windows:** the copied path already has quotes, so replace the quotes and everything between them, e.g. `"C:\Users\anna\Desktop\Drawings 1965"` |
+| `"/PATH/TO/YOUR/FOLDER"` | The path you copied in Step 4. The quotes must stay, because paths often contain spaces. **Mac:** paste between the quotes, e.g. `"/Users/anna/Desktop/YFA_cabana"`. **Windows:** the copied path already has quotes, so replace the quotes and everything between them, e.g. `"C:\Users\anna\Desktop\YFA_cabana"` |
 | `MY_FIRST_RUN`, `--limit 10` | As in Option A |
-
-#### While it runs
 
 The terminal shows progress for each drawing. The very first run also downloads the OCR model weights once (internet needed). Everything runs on the computer's processor, so a full dataset can take a long time; drawings without a title block are the slowest.
 
-#### Your results
+### Step 6: Open the results
 
-When it finishes, the result is in the `results` folder inside the project folder:
+The result is a CSV file in the **`results`** folder inside the project folder, named after your run: `results/extracted_metadata_MY_FIRST_RUN.csv`. To get to it, either:
 
-**`results/extracted_metadata_MY_FIRST_RUN.csv`**: one row per drawing, with the extracted fields, a confidence score (0 to 1) for each field, the source image, the Node ID (Option A only), and a `needs_manual_review` column marking rows to check by hand.
+- **Click the link in the terminal:** when the run finishes, the terminal shows the path of the results file. Cmd-click it (Mac) or Ctrl-click it (Windows) to open it.
+- **Use VS Code's file list:** open the `results` folder on the left and right-click the CSV → **Reveal in Finder** (Mac) / **Reveal in File Explorer** (Windows).
+- **Open the folder from the terminal.** Mac:
 
-Open it in Excel or any spreadsheet program. See [Output files](#output-files) for every column.
+  ```bash
+  open results
+  ```
 
-### Step 7: Getting updates
+  Windows:
 
-When the team releases a new version:
+  ```powershell
+  explorer results
+  ```
 
-#### If you got the project as a zip (Option A in Step 1)
-
-1. Unzip the new version into a **new** folder.
-2. Move your `data` folder from the old project folder into the new one.
-3. Run setup again in the new folder ([Step 2](#step-2-run-setup)), then continue from [Step 4](#step-4-activate-the-environment).
-
-Results from earlier runs stay in the old folder's `results/`. Once you have copied what you need, you can delete the old folder.
-
-#### If you cloned from GitHub (Option B in Step 1)
-
-From inside the project folder, with the environment activated ([Step 4](#step-4-activate-the-environment)):
-
-```bash
-git checkout main
-git pull
-pip install -r requirements.txt
-python download_models.py
-```
-
-`git pull` gets the new code, `pip install` adds any new dependencies, and `download_models.py` fetches any new models (it only downloads what is missing, so it is safe to run every time). Your `data/` and `results/` folders are not touched.
+Open the CSV in Excel or any spreadsheet program. It has one row per drawing, with the extracted fields, a confidence score (0 to 1) for each field, the source image, the Node ID, and a `needs_manual_review` column marking rows to check by hand. See [Output files](#output-files) for every column.
 
 ---
 
@@ -351,26 +349,39 @@ Every drawing first goes through title block detection. Drawings **with** a titl
 
 Reference for everything `run_pipeline.py` can do. For a first run, follow the [Quick start](#quick-start-from-a-fresh-computer-to-a-csv) instead. Run all commands from the project root with the environment activated.
 
+Process a dataset in `data/`, referred to by folder name:
+
 ```bash
-# Dataset mode: one of the prepared datasets (needs metadata.csv).
-# This is the mode that records the Node ID of each drawing.
 python run_pipeline.py --dataset_name YFA_cabana --run_name yfa_cabana
+```
 
-# Quick check on the first N images only
+Quick check on the first N images only:
+
+```bash
 python run_pipeline.py --dataset_name YFA_cabana --run_name demo --limit 10
+```
 
-# Folder mode: any folder of raw drawings (e.g. on the Desktop).
-# No metadata.csv needed, but no Node ID either.
+Process a dataset anywhere else (e.g. on the Desktop), referred to by path; same layout as in `data/`:
+
+```bash
 python run_pipeline.py --input_dir "/path/to/SomeFolder" --run_name some_batch
+```
 
-# No arguments: folder mode over data/YFA_cabana, data/YFA_cabana_test and
-# data/YFA_state_government (missing folders are skipped with a warning)
+No arguments: processes `data/YFA_cabana`, `data/YFA_cabana_test` and `data/YFA_state_government` (missing folders are skipped with a warning):
+
+```bash
 python run_pipeline.py
+```
 
-# No-TB branch: save a debug overlay per drawing (to check / tune the rules)
+No-TB branch: save a debug overlay per drawing (to check / tune the rules):
+
+```bash
 python run_pipeline.py --dataset_name Bates_smart_Mccutcheon --run_name bsm --limit 10 --no_tb_debug
+```
 
-# Skip drawings without a title block (behaviour before the No-TB branch existed)
+Skip drawings without a title block (behaviour before the No-TB branch existed):
+
+```bash
 python run_pipeline.py --dataset_name YFA_cabana --run_name tb_only --no_tb skip
 ```
 
@@ -378,8 +389,8 @@ python run_pipeline.py --dataset_name YFA_cabana --run_name tb_only --no_tb skip
 
 | Option | Meaning |
 |---|---|
-| `--dataset_name <name>` | Process `data/<name>/` using its `metadata.csv` (dataset mode) |
-| `--input_dir <path>` | Process any folder of drawings (folder mode) |
+| `--dataset_name <name>` | Process the dataset folder `data/<name>/` |
+| `--input_dir <path>` | Process a dataset folder at any location (same layout: `metadata.csv` + one folder per Node ID) |
 | `--run_name <name>` | Name used for this run's output: `results/extracted_metadata_<name>.csv` and `intermediate/<name>/`. Defaults to `v2` |
 | `--limit <N>` | Only process the first N images |
 
@@ -418,7 +429,7 @@ Everything under `intermediate/` can be deleted once a run is checked; only `res
 | Column | Meaning |
 |---|---|
 | `source_image` | File name of the drawing |
-| `node_id` | Node ID from `metadata.csv` (dataset mode only; blank in folder mode) |
+| `node_id` | Node ID of the drawing, from `metadata.csv` |
 | `<field>`, `<field>_confidence` | Each field (`project_name`, `drawing_name`, `architect`, `draughtsperson`, `drawing_number`, `date`, `scale`, `drawing_types`) followed by its confidence from 0 to 1. Both are blank when the field was not found |
 | `branch` | `tb` = read from the title block, `no_tb` = read from the whole sheet |
 | `tb_score` | Title block detector score (below 0.5 → `no_tb`) |
@@ -427,7 +438,7 @@ Everything under `intermediate/` can be deleted once a run is checked; only `res
 
 How to read them:
 
-- Each row can be traced back to its drawing through `source_image`, and in dataset mode also through `node_id`.
+- Each row can be traced back to its drawing through `source_image` and `node_id`.
 - Low confidence scores point to values worth checking by hand.
 - `drawing_types` (Elevation / Perspective / Plan / Section / Detail) is derived from keywords in the extracted `drawing_name`. Its confidence of 1.000 means the keyword was found, not that `drawing_name` itself was read correctly: check `drawing_name_confidence` for that. If there is no keyword, the cell is left blank and should be filled in by hand.
 - Rows with `branch = no_tb` come from a first version of the rule-based extractor and are always flagged for review (see [Known limitations](#known-limitations)).
@@ -436,20 +447,91 @@ How to read them:
 
 ## Troubleshooting
 
-| Problem | Fix |
-|---|---|
-| Model download fails with **HTTP 404** | You are not logged in, or your account has no access. GitHub reports a private repository's files as "not found" in that case. Run `gh auth login`, confirm you are a collaborator, then `python download_models.py`. Alternatively set a token with read access to the repo: Mac `export GITHUB_TOKEN=<token>`, Windows cmd `set GITHUB_TOKEN=<token>`, PowerShell `$env:GITHUB_TOKEN="<token>"` |
-| `command not found: gh` / `git` / `python` | Close and reopen the terminal. On Windows confirm the tool installed; use `py` instead of `python`. On Mac use `python3` before the environment is activated |
-| Setup fails (see also [Step 3](#step-3-check-that-setup-succeeded)): Python is too old | Install Python 3.11 ([Step 2](#step-2-run-setup)) and run setup with it, e.g. `python3.11 setup.py` (Mac) or `py -3.11 setup.py` (Windows) |
-| Linux: `Failed to create virtual environment` / `ensurepip is not available` | The `venv` module is missing. Install it (e.g. `sudo apt install python3.11-venv`, matching your Python version) and re-run setup |
-| Linux: `ImportError: libGL.so.1` when the pipeline starts | Minimal server images lack a graphics library that OpenCV loads. Run `sudo apt install libgl1 libglib2.0-0` (Debian/Ubuntu) |
-| Linux server: long runs stop when the SSH session closes | Run the pipeline inside `tmux` or `screen`, or prefix the command with `nohup` |
-| PowerShell refuses to run `Activate.ps1` | Use Windows cmd instead, or run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once |
-| `ModuleNotFoundError` when running the pipeline | The environment is not active. Activate it ([Step 4](#step-4-activate-the-environment)); `(venv)` should appear in the prompt |
-| Download blocked by a firewall / want to download by hand | From the repository's **Releases** page, open `models-v2`, put `title_block_detector_v2.pth` in `models/`, and unzip `field_classifier_v2.zip` into `models/` (it contains a `field_classifier_v2/` folder) |
-| A drawing is missing from the CSV | Either OCR found no text on it (the terminal shows `OCR found no text, skipping`), or the run used `--no_tb skip` and the drawing is listed in `intermediate/<run_name>/no_tb_images.txt`. `intermediate/<run_name>/routing.csv` shows which branch each drawing went to |
-| A No-TB row has wrong or empty fields | Re-run that drawing with `--no_tb_debug` and open its overlay in `intermediate/<run_name>/no_tb_debug/`: blocks without a box were not read by OCR; a box with the wrong role means a rule needs adjusting (`src/no_tb/field_specs.py`) |
-| `Warning: using model from old location 'output/...'` | Models are still in the old `output/` folder. Move them: `mkdir -p models && mv output/title_block_detector_v*.pth output/field_classifier_v* models/` |
+Problems during setup are covered in [Step 2](#step-2-check-that-setup-succeeded). This section covers everything else.
+
+#### `ModuleNotFoundError` when running the pipeline
+
+The environment is not active. Activate it as in [Step 3](#step-3-activate-the-environment); the terminal line should then start with `(venv)`.
+
+#### `command not found` / `is not recognized` for `python`
+
+Before the environment is activated, use `python3` on Mac/Linux and `py` on Windows. After activating ([Step 3](#step-3-activate-the-environment)), `python` works everywhere. If you just installed something, open a new terminal.
+
+#### PowerShell refuses to run `Activate.ps1`
+
+Run this once, then activate again:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+#### Model download fails with HTTP 404
+
+GitHub reports a private repository's files as "not found" when you are not logged in or your account has no access. Make sure your account has been added as a collaborator, log in, and download again:
+
+```bash
+gh auth login
+```
+
+```bash
+python download_models.py
+```
+
+Alternatively, set a token with read access to the repository before downloading. Mac / Linux:
+
+```bash
+export GITHUB_TOKEN=<token>
+```
+
+Windows PowerShell:
+
+```powershell
+$env:GITHUB_TOKEN="<token>"
+```
+
+Windows Command Prompt:
+
+```bat
+set GITHUB_TOKEN=<token>
+```
+
+#### Download the models by hand (firewall, no access)
+
+See [If step 5 failed: download the models from GitHub](#if-step-5-failed-download-the-models-from-github).
+
+#### `CERTIFICATE_VERIFY_FAILED` on Mac
+
+Python installed from python.org cannot verify secure downloads until its certificates are installed (this can also stop the OCR weights from downloading on the first run). Open **Applications → Python 3.11** and double-click **Install Certificates.command**, then try again.
+
+#### A drawing is missing from the CSV
+
+Either OCR found no text on it (the terminal shows `OCR found no text, skipping`), or the run used `--no_tb skip` and the drawing is listed in `intermediate/<run_name>/no_tb_images.txt`. `intermediate/<run_name>/routing.csv` shows which branch each drawing went to.
+
+#### A No-TB row has wrong or empty fields
+
+Re-run that drawing with `--no_tb_debug` and open its overlay in `intermediate/<run_name>/no_tb_debug/`: blocks without a box were not read by OCR; a box with the wrong role means a rule needs adjusting (`src/no_tb/field_specs.py`).
+
+#### `Warning: using model from old location 'output/...'`
+
+The models are still in the old `output/` folder. Move them (Mac / Linux):
+
+```bash
+mkdir -p models && mv output/title_block_detector_v*.pth output/field_classifier_v* models/
+```
+
+On Windows, move `title_block_detector_v2.pth` and the `field_classifier_v2` folder from `output` to a new `models` folder in File Explorer.
+
+#### Linux: `ImportError: libGL.so.1` when the pipeline starts
+
+Minimal server images lack a graphics library that OpenCV loads (Debian/Ubuntu):
+
+```bash
+sudo apt install libgl1 libglib2.0-0
+```
+
+#### Linux server: long runs stop when the SSH session closes
+
+Run the pipeline inside `tmux` or `screen`, or put `nohup` in front of the command.
 
 Still stuck? Send the full error message to the team.
 
@@ -526,6 +608,20 @@ python field_classification/export_fields_to_csv.py --image_dir data/<crop_folde
 ```
 
 Both also accept no arguments, falling back to the default datasets and folders used during development.
+
+### Updating a git clone
+
+Developers working from a clone of the repository update with:
+
+```bash
+git checkout main
+git pull
+# with the environment activated:
+pip install -r requirements.txt
+python download_models.py
+```
+
+`download_models.py` only downloads models that are missing, so it is safe to run every time.
 
 ### Input module
 

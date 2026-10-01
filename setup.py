@@ -47,7 +47,13 @@ MIN_PYTHON_VERSION = (3, 11)  # matches README; docTR 1.x, torch and transformer
 # on CPU, so Linux installs torch/torchvision from PyTorch's CPU-only index instead.
 TORCH_CPU_INDEX = "https://download.pytorch.org/whl/cpu"
 TORCH_PACKAGES = ("torch", "torchvision")
-README_HINT = "README → Quick start → Step 3: Check that setup succeeded"
+README_HINT = "README → Quick start → Step 2: Check that setup succeeded"
+# Where the trained models are published. The release tag is read from
+# download_models.py (RELEASE_TAG); MODEL_RELEASE_TAG is only the fallback.
+# Keep MODEL_FILES in sync with the asset names in download_models.py.
+RELEASES_URL = "https://github.com/tanbowen5566-web/T8-3-Architecture-Drawings/releases"
+MODEL_RELEASE_TAG = "models-v2"
+MODEL_FILES = ("title_block_detector_v2.pth", "field_classifier_v2.zip")
 
 # (key, label) in the order the steps run
 STEPS = [
@@ -169,7 +175,7 @@ def check_requirements_file(args):
         print_error(f"Could not find {REQUIREMENTS_FILE} in {PROJECT_ROOT}")
         raise StepFailed(
             f"{REQUIREMENTS_FILE} is missing from the project folder ({PROJECT_ROOT}).",
-            "The project folder is incomplete. Download or unzip the project again (README → Step 1),\n"
+            "The project folder is incomplete. Ask the team for a complete copy of the project,\n"
             "then run setup from the new folder.",
         )
     print_success(f"Found {REQUIREMENTS_FILE}")
@@ -299,35 +305,53 @@ def install_requirements(args):
     return "installed"
 
 
-def diagnose_download_failure(output):
-    """Turn download_models.py output into a specific fix."""
-    text = output.lower()
-    manual = (
-        "Or download the models by hand: on the repository's Releases page open the model release,\n"
-        "put the .pth file in models/ and unzip the field classifier .zip into models/."
+def model_release_tag():
+    """Release tag that holds the models. Read from download_models.py so the two
+    files cannot disagree; falls back to MODEL_RELEASE_TAG if it cannot be read."""
+    try:
+        with open("download_models.py", encoding="utf-8") as f:
+            match = re.search(r"""^RELEASE_TAG\s*=\s*["']([^"']+)["']""", f.read(), re.M)
+        if match:
+            return match.group(1)
+    except OSError:
+        pass
+    return MODEL_RELEASE_TAG
+
+
+def manual_download_fix():
+    """Step-by-step instructions for downloading the models from the GitHub Release by hand."""
+    detector, classifier_zip = MODEL_FILES
+    classifier_dir = classifier_zip[:-len(".zip")]
+    return (
+        "Download the models by hand from GitHub instead:\n"
+        f"1. Open {RELEASES_URL} and find the release '{model_release_tag()}'.\n"
+        f"2. Under 'Assets', download {detector} and {classifier_zip}.\n"
+        f"3. In the project folder, open the 'models' folder (create a folder named 'models' if it is missing)\n"
+        f"   and move {detector} into it.\n"
+        f"4. Unzip {classifier_zip} and move the resulting '{classifier_dir}' folder into 'models'.\n"
+        f"   Check: the file models/{classifier_dir}/config.json must exist (on Windows, 'Extract All'\n"
+        f"   can create {classifier_dir}/{classifier_dir}/; move the inner folder up if so).\n"
+        "5. Replace any file with the same name that is already there.\n"
+        "Setup is otherwise complete: continue with README → Step 3 (no need to run setup again)."
     )
+
+
+def diagnose_download_failure(output):
+    """Turn download_models.py output into a short description of what went wrong."""
+    text = output.lower()
     if "certificate_verify_failed" in text:
-        return ("Python could not verify GitHub's SSL certificate.",
-                "Mac with Python from python.org: open Applications → Python 3.11 and double-click\n"
-                f"'Install Certificates.command', then run: {setup_command()}")
+        return "Python could not verify GitHub's SSL certificate, so the download was refused."
     if "404" in text or "not found" in text:
-        return ("GitHub answered 'not found' (HTTP 404). For a private repository this means you are not\n"
-                "logged in, or your GitHub account has no access to it.",
-                "1. Run: gh auth login   (or set the GITHUB_TOKEN environment variable)\n"
-                "2. Make sure the repository owner has added your account as a collaborator.\n"
-                f"3. Run setup again: {setup_command()}\n" + manual)
+        return ("GitHub answered 'not found' (HTTP 404): this computer is not logged in to GitHub,\n"
+                "or the account has no access to the repository.")
     if "401" in text or "403" in text or "bad credentials" in text:
-        return ("GitHub rejected the login (HTTP 401/403): the saved login or token is invalid or expired.",
-                "Run: gh auth login   (or create a new GITHUB_TOKEN), then run setup again.\n" + manual)
+        return "GitHub rejected the login (HTTP 401/403): the saved login or token is invalid or expired."
     if any(s in text for s in ("checksum", "sha256", "hash mismatch")):
-        return ("A downloaded model file is corrupted (checksum mismatch), usually from an interrupted download.",
-                "Activate the environment (README → Step 4), then run: python download_models.py --force")
+        return "A downloaded model file is corrupted (checksum mismatch), usually from an interrupted download."
     if any(s in text for s in ("timed out", "urlopen error", "name or service not known", "getaddrinfo",
                                "temporary failure in name resolution", "connection", "network")):
-        return ("Could not reach GitHub (network problem or firewall).",
-                f"Check your internet connection, then run setup again: {setup_command()}\n" + manual)
-    return ("download_models.py stopped with an error (see its output just above this summary).",
-            f"Fix the error shown above, then run setup again: {setup_command()}\n" + manual)
+        return "Could not reach GitHub (network problem or firewall)."
+    return "download_models.py stopped with an error (see its output just above this summary)."
 
 
 def download_models(args):
@@ -336,13 +360,12 @@ def download_models(args):
     if not os.path.isfile("download_models.py"):
         print_error("download_models.py not found")
         raise StepFailed("download_models.py is missing from the project folder.",
-                         "The project folder is incomplete. Download or unzip the project again (README → Step 1).")
+                         "The project folder is incomplete. Ask the team for a complete copy of the project.")
 
     returncode, output = run_and_capture([get_venv_executable("python"), "download_models.py"])
     if returncode != 0:
         print_error("Model download failed")
-        problem, fix = diagnose_download_failure(output)
-        raise StepFailed(problem, fix)
+        raise StepFailed(diagnose_download_failure(output), manual_download_fix())
 
     print_success("Models ready")
     return "models/ ready"
