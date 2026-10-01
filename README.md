@@ -38,7 +38,7 @@ This guide starts from the project folder you received. Setup needs about 3 GB o
    python3.11 --version
    ```
 
-   If it shows 3.11 or higher, go straight to step 3.
+   If it shows 3.11 or higher, go straight to Run setup.
 
 2. Install Python 3.11, either way:
    - **Easiest:** run the macOS installer from [python.org](https://www.python.org/downloads/macos/). Then open **Applications → Python 3.11** and double-click **Install Certificates.command**.
@@ -64,7 +64,7 @@ This guide starts from the project folder you received. Setup needs about 3 GB o
    py --version
    ```
 
-   If it shows 3.11 or higher, go straight to step 3.
+   If it shows 3.11 or higher, go straight to run setup.
 
 2. Install Python 3.11, either with this command or with the 64-bit installer from [python.org](https://www.python.org/downloads/windows/) (tick **"Add python.exe to PATH"**):
 
