@@ -35,7 +35,7 @@ This guide starts from the project folder you received. Setup needs about 3 GB o
 1. Check your Python version:
 
    ```bash
-   python3 --version
+   python3.11 --version
    ```
 
    If it shows 3.11 or higher, go straight to step 3.
@@ -50,16 +50,10 @@ This guide starts from the project folder you received. Setup needs about 3 GB o
 
    Then close the terminal and open a new one (**Terminal → New Terminal**).
 
-3. Run setup. If you installed Python 3.11 in step 2:
+3. Run setup.:
 
    ```bash
    python3.11 setup.py
-   ```
-
-   If `python3 --version` already showed 3.11 or higher:
-
-   ```bash
-   python3 setup.py
    ```
 
 #### Windows
